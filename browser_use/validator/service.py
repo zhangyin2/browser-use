@@ -3,11 +3,15 @@ Generic validation service for browser automation tasks.
 """
 
 import json
-from typing import Any, Dict, Optional, Tuple
+import logging
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from langchain_core.language_models import BaseLanguageModel
+from langchain_core.messages import HumanMessage
 
 from browser_use.browser.views import BrowserState
+
+logger = logging.getLogger(__name__)
 
 
 class ValidationService:
@@ -21,7 +25,7 @@ class ValidationService:
 		task: str,
 		state: BrowserState,
 		result: Optional[str],
-		context: Optional[Dict[str, Any]] = None,
+		expected_actions: Optional[Sequence[str]] = None,
 	) -> Tuple[bool, str]:
 		"""
 		Validates if a task was completed successfully based on the final state
@@ -31,12 +35,7 @@ class ValidationService:
 		    task: Original task description
 		    state: Final state of the website
 		    result: Result returned by the agent
-		    context: Additional context for validation (optional)
-				Can include:
-				- expected_actions: List of expected actions
-				- success_criteria: Specific criteria for success
-				- website_data: Website-specific validation rules
-				- custom_rules: Additional validation rules
+		    expected_actions: List of expected actions (optional)
 
 		Returns:
 		    tuple[bool, str]: (is_valid, reason)
@@ -44,8 +43,11 @@ class ValidationService:
 		if result is None:
 			return False, 'No result provided'
 
-		prompt = self._build_validation_prompt(task, state, result, context)
-		response = await self.llm.ainvoke({'content': prompt})
+		prompt = self._build_validation_prompt(task, state, result, expected_actions)
+
+		# Create a message for the LLM
+		message = HumanMessage(content=prompt)
+		response = await self.llm.ainvoke([message])
 
 		try:
 			# Parse JSON response
@@ -53,7 +55,8 @@ class ValidationService:
 			is_valid = validation_result.get('is_valid', False)
 			reason = validation_result.get('reason', 'No reason provided')
 			return bool(is_valid), str(reason)
-		except (json.JSONDecodeError, AttributeError):
+		except (json.JSONDecodeError, AttributeError) as e:
+			logger.error(f'Failed to parse validation response: {e}')
 			return False, 'Invalid validation response format'
 
 	def _build_validation_prompt(
@@ -61,52 +64,68 @@ class ValidationService:
 		task: str,
 		state: BrowserState,
 		result: str,
-		context: Optional[Dict[str, Any]] = None,
+		expected_actions: Optional[Sequence[str]] = None,
 	) -> str:
 		"""
-		Builds the validation prompt with flexible context support
+		Builds the validation prompt
 
 		Args:
 		    task: Task description
 		    state: Browser state
 		    result: Task result
-		    context: Additional validation context
+		    expected_actions: Expected sequence of actions
 		"""
+		# Extract website from task if available
+		website = None
+		if 'go to' in task.lower():
+			# Try to extract website from task
+			words = task.lower().split()
+			try:
+				idx = words.index('to') + 1
+				if idx < len(words):
+					website = words[idx].strip('.,')
+			except ValueError:
+				pass
+
 		prompt = [
 			'You are a validation agent tasked with determining if a browser automation task was completed successfully.',
 			'',
 			f'Task: {task}',
-			'',
-			'Current website state:',
-			str(state),
-			'',
-			'Task result:',
-			str(result),
-			'',
 		]
 
-		# Add context-specific validation criteria
-		if context:
-			if 'expected_actions' in context:
-				prompt.extend(['Expected actions:', str(context['expected_actions']), ''])
+		if website:
+			prompt.extend([f'Target Website: {website}', ''])
 
-			if 'success_criteria' in context:
-				prompt.extend(['Success criteria:', str(context['success_criteria']), ''])
+		prompt.extend(
+			[
+				'Current website state:',
+				str(state),
+				'',
+				'Task result:',
+				str(result),
+				'',
+			]
+		)
 
-			if 'website_data' in context:
-				prompt.extend(['Website-specific context:', str(context['website_data']), ''])
-
-			if 'custom_rules' in context:
-				prompt.extend(['Additional validation rules:', str(context['custom_rules']), ''])
+		if expected_actions:
+			prompt.extend(
+				[
+					'Expected sequence of actions:',
+					*[f'- {action}' for action in expected_actions],
+					'',
+				]
+			)
 
 		prompt.extend(
 			[
 				'Based on the above information, determine if the task was completed successfully.',
-				'Respond with a JSON object containing:',
-				'- is_valid: boolean indicating if task was successful',
-				'- reason: detailed explanation of the validation decision',
+				'Consider:',
+				'1. Was the correct website accessed?',
+				'2. Were all required actions completed?',
+				'3. Does the final state match the task requirements?',
+				'4. Was the task completed successfully?',
 				'',
-				'Example response: {"is_valid": true, "reason": "Task completed successfully because..."}',
+				'Respond with a JSON object: {"is_valid": boolean, "reason": "detailed explanation"}',
 			]
 		)
 
@@ -114,11 +133,10 @@ class ValidationService:
 
 	async def validate_batch(
 		self,
-		tasks: list[Dict[str, Any]],
-		states: list[BrowserState],
-		results: list[Optional[str]],
-		contexts: Optional[list[Dict[str, Any]]] = None,
-	) -> list[Tuple[bool, str]]:
+		tasks: List[Dict[str, Any]],
+		states: List[BrowserState],
+		results: List[Optional[str]],
+	) -> List[Tuple[bool, str]]:
 		"""
 		Validate multiple tasks in batch
 
@@ -126,31 +144,24 @@ class ValidationService:
 		    tasks: List of task descriptions and metadata
 		    states: List of final browser states
 		    results: List of agent results
-		    contexts: List of validation contexts (optional)
 
 		Returns:
 		    List of (is_valid, reason) tuples
 		"""
-		if contexts is None:
-			contexts = [None] * len(tasks)
-
 		validations = []
-		for task_data, state, result, context in zip(tasks, states, results, contexts):
-			# Extract task description from task data
+		for task_data, state, result in zip(tasks, states, results):
+			# Extract task description and actions
 			task = (
 				task_data['confirmed_task']
 				if isinstance(task_data, dict) and 'confirmed_task' in task_data
 				else str(task_data)
 			)
 
-			# If task_data is a dict, merge it into context
-			if isinstance(task_data, dict):
-				merged_context = context or {}
-				merged_context.update({k: v for k, v in task_data.items() if k != 'confirmed_task'})
-			else:
-				merged_context = context
+			expected_actions = (
+				task_data.get('action_reprs') if isinstance(task_data, dict) else None
+			)
 
-			is_valid, reason = await self.validate(task, state, result, merged_context)
+			is_valid, reason = await self.validate(task, state, result, expected_actions)
 			validations.append((is_valid, reason))
 
 		return validations

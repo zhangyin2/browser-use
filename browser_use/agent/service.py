@@ -14,7 +14,11 @@ from browser_use.agent.views import (
 	Output,
 )
 from browser_use.controller.service import ControllerService
-from browser_use.controller.views import ControllerActionResult, ControllerActions, ControllerPageState
+from browser_use.controller.views import (
+	ControllerActionResult,
+	ControllerActions,
+	ControllerPageState,
+)
 from browser_use.utils import time_execution_async
 
 load_dotenv()
@@ -54,7 +58,7 @@ class AgentService:
 		).get_system_message()
 
 		# Init messages
-		first_message = HumanMessage(content=f'Your main task is: {task}')
+		first_message = HumanMessage(content=f'Your task is: {task}')
 		self.messages: list[BaseMessage] = [system_prompt, first_message]
 		self.n = 0
 
@@ -163,7 +167,7 @@ class AgentService:
 		# TODO: include state, actions, etc.
 
 		new_message = AgentMessagePrompt(state).get_user_message()
-		logger.info(f'current tabs: {state.tabs}')
+		logger.debug(f'current tabs: {state.tabs}')
 		input_messages = self.messages + [new_message]
 
 		structured_llm = self.llm.with_structured_output(Output, include_raw=False)
@@ -174,9 +178,9 @@ class AgentService:
 		# Only append the output message
 		history_new_message = AgentMessagePrompt(state).get_message_for_history()
 		self.messages.append(history_new_message)
-		self.messages.append(AIMessage(content=response.model_dump_json()))
-		logger.info(f'current state\n: {response.current_state.model_dump_json(indent=4)}')
-		logger.info(f'action\n: {response.action.model_dump_json(indent=4)}')
+		self.messages.append(AIMessage(content=response.model_dump_json(exclude_unset=True)))
+		logger.info(f'\nThought: {response.model_dump_json(indent=4)}')
+		logger.info(f'Next action: {response.action.model_dump_json(exclude_unset=True)}')
 		self._save_conversation(input_messages, response)
 
 		return response.action

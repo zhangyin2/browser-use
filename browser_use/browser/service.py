@@ -130,7 +130,7 @@ class BrowserService:
 		elapsed = time.time() - start_time
 		remaining = max(self.MINIMUM_WAIT_TIME - elapsed, 0)
 
-		logger.info(
+		logger.debug(
 			f'--Page loaded in {elapsed:.2f} seconds, waiting for additional {remaining:.2f} seconds'
 		)
 
