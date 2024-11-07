@@ -33,7 +33,6 @@ class AgentOutput(ControllerActions, AgentOnlyAction):
 	@staticmethod
 	def description() -> str:
 		return AgentOnlyAction.description() + ControllerActions.description()
-		#
 
 
 class Output(BaseModel):

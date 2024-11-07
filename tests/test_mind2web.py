@@ -65,11 +65,11 @@ async def test_random_samples(test_cases: List[Dict[str, Any]], llm, controller,
 	samples = random.sample(test_cases, 1)
 
 	for i, case in enumerate(samples, 1):
-		task = f"Go to {case['website']}.com and {case['confirmed_task']}"
+		task = f"Go to {case['website']}.com and {case['confirmed_task']} You are not allowed to ask for human input."
 		logger.info(f'--- Random Sample {i}/{len(samples)} ---')
 		logger.info(f'Task: {task}\n')
 
-		agent = AgentService(task, llm, controller, use_vision=True)
+		agent = AgentService(task, llm, controller, use_vision=True, allow_terminal_input=False)
 
 		final_result = None
 		for step in range(MAX_STEPS):

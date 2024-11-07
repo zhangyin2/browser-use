@@ -261,7 +261,6 @@ class BrowserService:
 
 			# Then send keys
 			element.send_keys(text)
-			logger.info(f'Input text into element with xpath: {xpath}')
 
 			self.wait_for_page_load()
 
@@ -276,6 +275,7 @@ class BrowserService:
 
 		xpath = state.selector_map[index]
 		self._input_text_by_xpath(xpath, text)
+		logger.info(f'Input text into index {index}: xpath: {xpath}')
 
 	def _click_element_by_xpath(self, xpath: str):
 		"""
@@ -329,27 +329,33 @@ class BrowserService:
 			raise Exception(f'Failed to click element with xpath: {xpath}. Error: {str(e)}')
 
 	@time_execution_sync('--click')
-	def click_element_by_index(self, index: int, state: BrowserState):
+	def click_element_by_index(self, index: int, state: BrowserState, clicks: int = 1):
 		"""
 		Clicks an element using its index from the selector map.
+		Can click multiple times if specified.
 		"""
 		if index not in state.selector_map:
 			raise Exception(f'Element index {index} not found in selector map')
 
-		# Store current number of tabs before clicking
+		xpath = state.selector_map[index]
 		driver = self._get_driver()
+
+		# Store initial number of tabs
 		initial_handles = len(driver.window_handles)
 
-		xpath = state.selector_map[index]
-		self._click_element_by_xpath(xpath)
-		logger.info(f'Clicked on index {index}: with xpath {xpath}')
+		# Perform clicks
+		for _ in range(clicks):
+			try:
+				self._click_element_by_xpath(xpath)
+				logger.info(f'Clicked index {index}: xpath: {xpath} ({_ + 1}/{clicks} clicks)')
+			except Exception as e:
+				logger.warning(f'Element no longer available after {_ + 1} clicks: {str(e)}')
+				break
 
 		# Check if new tab was opened
 		current_handles = len(driver.window_handles)
 		if current_handles > initial_handles:
 			return self.handle_new_tab()
-
-	# endregion
 
 	def handle_new_tab(self) -> dict:
 		"""Handle newly opened tab and switch to it"""

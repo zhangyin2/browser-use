@@ -15,6 +15,7 @@ class GoToUrlControllerAction(BaseModel):
 
 class ClickElementControllerAction(BaseModel):
 	id: int
+	clicks: int = 1
 
 
 class InputTextControllerAction(BaseModel):

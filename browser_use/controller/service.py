@@ -1,6 +1,10 @@
 from browser_use.browser.service import BrowserService
 from browser_use.browser.views import BrowserState
-from browser_use.controller.views import ControllerActionResult, ControllerActions, ControllerPageState
+from browser_use.controller.views import (
+	ControllerActionResult,
+	ControllerActions,
+	ControllerPageState,
+)
 from browser_use.utils import time_execution_sync
 
 
@@ -71,7 +75,9 @@ class ControllerService:
 				self.browser.done(action.done.text)
 				return ControllerActionResult(done=True, extracted_content=action.done.text)
 			elif action.click_element:
-				self.browser.click_element_by_index(action.click_element.id, current_state)
+				self.browser.click_element_by_index(
+					action.click_element.id, current_state, action.click_element.clicks
+				)
 			elif action.input_text:
 				self.browser.input_text_by_index(
 					action.input_text.id, action.input_text.text, current_state
