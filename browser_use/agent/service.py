@@ -37,6 +37,7 @@ class AgentService:
 		controller: ControllerService | None = None,
 		use_vision: bool = True,
 		save_conversation_path: str | None = None,
+		allow_terminal_input: bool = True,
 	):
 		"""
 		Agent service.
@@ -45,9 +46,11 @@ class AgentService:
 			task (str): Task to be performed.
 			llm (AvailableModel): Model to be used.
 			controller (ControllerService | None): You can reuse an existing or (automatically) create a new one.
+			allow_terminal_input (bool): Flag to allow or disallow terminal input to resolve uncertanty or if the agent is stuck.
 		"""
 		self.task = task
 		self.use_vision = use_vision
+		self.allow_terminal_input = allow_terminal_input
 
 		self.controller_injected = controller is not None
 		self.controller = controller or ControllerService()
@@ -150,7 +153,16 @@ class AgentService:
 		)
 
 	async def _take_human_input(self, question: str) -> AgentOutput:
-		human_input = input(f'\nHi, your input is required: {question}\n\n')
+		if self.allow_terminal_input:
+			human_input = input(f'\nHi, your input is required: {question}\n\n')
+		else:
+			logger.info(
+				f'Terminal input requested but not allowed. Set allow_terminal_input=True to enable. Question of agent: {question}'
+			)
+			human_input = (
+				'Human input not allowed, make assumptions for uncertainty and try yourself.'
+			)
+
 		logger.info('-' * 50)
 		self.messages.append(HumanMessage(content=human_input))
 
@@ -179,7 +191,9 @@ class AgentService:
 		history_new_message = AgentMessagePrompt(state).get_message_for_history()
 		self.messages.append(history_new_message)
 		self.messages.append(AIMessage(content=response.model_dump_json(exclude_unset=True)))
-		logger.info(f'\nThought: {response.model_dump_json(indent=4)}')
+		logger.info(
+			f'Thought: {response.current_state.model_dump_json(exclude_unset=True, indent=4)}'
+		)
 		logger.info(f'Next action: {response.action.model_dump_json(exclude_unset=True)}')
 		self._save_conversation(input_messages, response)
 
