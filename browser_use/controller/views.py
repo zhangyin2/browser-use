@@ -15,7 +15,7 @@ class GoToUrlControllerAction(BaseModel):
 
 class ClickElementControllerAction(BaseModel):
 	id: int
-	clicks: int = 1
+	num_clicks: int = 1
 
 
 class InputTextControllerAction(BaseModel):
@@ -67,9 +67,9 @@ class ControllerActions(BaseModel):
   Example: {"go_back": true}
 - Mark entire task as complete
   Example: {"done": {"text": "This is the requested result of the task which is send to the human..."}}
-- Click an interactive element by its given ID
-  Example: {"click_element": {"id": 1}}
-- Input text into an interactiveelement by its ID
+- Click an interactive element by its given ID, you can click multiple times if you need to click the same element multiple times
+  Example: {"click_element": {"id": 1, "num_clicks": 2}}
+- Input text into an interactive element by its ID
   Example: {"input_text": {"id": 1, "text": "Hello world"}}
 - Get the page content in markdown
   Example: {"extract_page_content": true}

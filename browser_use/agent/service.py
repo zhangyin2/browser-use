@@ -192,7 +192,7 @@ class AgentService:
 		self.messages.append(history_new_message)
 		self.messages.append(AIMessage(content=response.model_dump_json(exclude_unset=True)))
 		logger.info(
-			f'Thought: {response.current_state.model_dump_json(exclude_unset=True, indent=4)}'
+			f'\nThought: {response.current_state.model_dump_json(exclude_unset=True, indent=4)}'
 		)
 		logger.info(f'Next action: {response.action.model_dump_json(exclude_unset=True)}')
 		self._save_conversation(input_messages, response)

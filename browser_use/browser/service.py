@@ -329,7 +329,7 @@ class BrowserService:
 			raise Exception(f'Failed to click element with xpath: {xpath}. Error: {str(e)}')
 
 	@time_execution_sync('--click')
-	def click_element_by_index(self, index: int, state: BrowserState, clicks: int = 1):
+	def click_element_by_index(self, index: int, state: BrowserState, num_clicks: int = 1):
 		"""
 		Clicks an element using its index from the selector map.
 		Can click multiple times if specified.
@@ -344,10 +344,15 @@ class BrowserService:
 		initial_handles = len(driver.window_handles)
 
 		# Perform clicks
-		for _ in range(clicks):
+		for _ in range(num_clicks):
 			try:
 				self._click_element_by_xpath(xpath)
-				logger.info(f'Clicked index {index}: xpath: {xpath} ({_ + 1}/{clicks} clicks)')
+
+				msg = f'Clicked index {index}: xpath: {xpath}'
+				if num_clicks > 1:
+					msg += f' ({_ + 1}/{num_clicks} clicks)'
+				logger.info(msg)
+
 			except Exception as e:
 				logger.warning(f'Element no longer available after {_ + 1} clicks: {str(e)}')
 				break
