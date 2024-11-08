@@ -19,44 +19,42 @@ class AgentSystemPrompt:
 		# 		output_format = """
 		# {"valuation_previous_goal": "Success if completed, else short sentence of why not successful.", "goal": "short description what you want to achieve", "action": "action_name", "params": {"param_name": "param_value"}}
 		#     """
+		RESPONSE_FORMAT = """{{
+			"current_state": {{
+				"valuation_previous_goal": "String describing if previous action succeeded or failed",
+				"memory": "String to store progress information",
+				"next_goal": "String describing your next immediate goal"
+			}},
+			"action": {{
+				// EXACTLY ONE of these actions must be specified
+			}}
+		}}"""
 
 		AGENT_PROMPT = f"""
-    You are an AI agent that helps users interact with websites. 
-    Your input are all the interactive elements with its context of the current page from.
     
-    This is how an input looks like:
-    33: <button>Clickable element</button>
-    _: Not clickable, only for your context
+	You are an AI agent that helps users interact with websites. You receive a list of interactive elements from the current webpage and must respond with specific actions.
 
-    In the beginning the list will be empty.
-	On elements with _ you can not click.
-	On elements with a index you can click.
-    
-	Additional you get a list of your previous actions.
+	INPUT FORMAT:
+	- Clickable elements are numbered: "33: <button>Click me</button>"
+	- Context elements are marked with underscore: "_: <div>Context text</div>"
+	- Empty list means you're on a new page
 
-    
-	Respond with a valid JSON object, containing 2 keys: current_state and action.
-    In current_state there are 3 keys:
-	valuation_previous_goal: Evaluate if the previous goal was achieved or what went wrong. E.g. Failed because ...
-	memory: This you can use as a memory to store where you are in your overall task. E.g. if you need to find 10 jobs, you can store the already found jobs here.
-	next_goal: The next goal you want to achieve e.g. clicking on ... button to ...
+	RESPONSE FORMAT valid JSON:
+	{RESPONSE_FORMAT}
 
-	For the action choose EXACTLY ONE from the following list:
+	AVAILABLE ACTIONS:
     {self.default_action_description}
-    To interact with elements, use their index number from the input line. Write it in the click_element() or input_text() actions.
-    Make sure to only use indexes that are present in the list.
-    If you need more text from the page you can use the extract_page_content action.
 
-	If you see any cookie or accept privacy policy please always just accepted them without hesitation.
 
-    If you evaluate repeatedly that you dont achieve the next_goal, try to find a new element that can help you achieve your task or if persistent, go back or reload the page and try a different approach.
-    
-	You can ask_human for clarification if you are completely stuck or if you really need more information. 
+	IMPORTANT RULES:
+	1. Only use element IDs that exist in the input list
+	2. Use extract_page_content to get more page information
+	3. If stuck, try alternative approaches or go back
+	4. Ask for human help only when completely stuck
+	5. Use extract_page_content followed by done action to complete task
+	6. If an image is provided, use it for context
 
-	If a picture is provided, use it to understand the context and the next action.
-	
-	If you are sure you are done you can extract_page_content to get the markdown content and in the next action call done() with the text of the requested result to end the task and wait for further instructions.
-
+	Remember: Choose EXACTLY ONE action per response. Invalid combinations or multiple actions will be rejected.
     """
 		return SystemMessage(content=AGENT_PROMPT)
 

@@ -57,26 +57,26 @@ class ControllerActions(BaseModel):
 		Returns a human-readable description of available actions.
 		"""
 		return """
-- Search Google with a query
-  Example: {"search_google": {"query": "weather today"}}
-- Navigate directly to a URL where you want to go
-  Example: {"go_to_url": {"url": "https://abc.com"}}
-- Do nothing/wait
-  Example: {"nothing": true}
-- Go back to previous page
-  Example: {"go_back": true}
-- Mark entire task as complete
-  Example: {"done": {"text": "This is the requested result of the task which is send to the human..."}}
-- Click an interactive element by its given ID, you can click multiple times if you need to click the same element multiple times
-  Example: {"click_element": {"id": 1, "num_clicks": 2}}
-- Input text into an interactive element by its ID
-  Example: {"input_text": {"id": 1, "text": "Hello world"}}
-- Get the page content in markdown
-  Example: {"extract_page_content": true}
-- Switch to a different browser tab
-  Example: {"switch_tab": {"handle": "CDwindow-1234..."}}
-- Open a new tab
-  Example: {"open_tab": {"url": "https://abc.com"}}
+- Search Google:
+   {"search_google": {"query": "Your search query"}}
+- Navigate to URL:
+   {"go_to_url": {"url": "https://example.com"}}
+- Wait/Do nothing:
+   {"nothing": true}
+- Go back:
+   {"go_back": true}
+- Click an interactive element by its given ID and number how many times you want to click it (default is 1):
+   {"click_element": {"id": 1, "num_clicks": 2}}
+- Input text into an interactive element by its ID:
+   {"input_text": {"id": 1, "text": "Your text"}}
+- Get page content:
+   {"extract_page_content": true}
+- Open new tab:
+   {"open_tab": {"url": "https://example.com"}}
+- Switch tab:
+   {"switch_tab": {"handle": "tab-id"}}
+- Complete task:
+   {"done": {"text": "Final result message"}}
 """
 
 
