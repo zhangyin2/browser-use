@@ -8,6 +8,32 @@ class AgentSystemPrompt:
 		self.task = task
 		self.default_action_description = default_action_description
 
+	def _get_response_format(self) -> str:
+		return """
+{
+    "action_type": "action_name",    
+    "params": {                      
+        "param1": "value1",
+        "param2": "value2"
+    },
+    "valuation": "Valuation of last action, e.g. Failed to click x because ...", 
+    "memory": "Memory of the overall task, e.g. Found 3/10 results. 1. ... 2. ... 3. ...",   
+    "next_goal": "Next concrete immediate goal achievable by the next action"        
+}"""
+
+	def _get_example_response(self) -> str:
+		return """
+{
+    "action_type": "click_element",
+    "params": {
+        "index": 44,
+        "num_clicks": 1
+    },
+    "valuation": "Successfully clicked the element accept cookies",
+    "memory": "Found 3/10 results. 1. ... 2. ... 3. ...",
+    "next_goal": "Click the first result with title '..."
+}"""
+
 	def get_system_message(self) -> SystemMessage:
 		"""
 		Get the system prompt for the agent.
@@ -15,37 +41,11 @@ class AgentSystemPrompt:
 		Returns:
 		    str: Formatted system prompt
 		"""
-		# System prompts for the agent
-		# 		output_format = """
-		# {"valuation_previous_goal": "Success if completed, else short sentence of why not successful.", "goal": "short description what you want to achieve", "action": "action_name", "params": {"param_name": "param_value"}}
-		#     """
-		RESPONSE_FORMAT = """
-{
-    "action_type": "action_name",    // Required: one of the available actions
-    "params": {                      // Required: parameters for the action
-        "param1": "value1",
-        "param2": "value2"
-    },
-    "valuation": "previous result",  // Required: result of previous action
-    "memory": "current progress",    // Required: current state
-    "next_goal": "next goal"         // Required: immediate next goal
-}"""
-
-		EXAMPLE_RESPONSE = """
-{
-    "action_type": "click_element",
-    "params": {
-        "element_id": 44,
-        "num_clicks": 1
-    },
-    "valuation": "Found the search result",
-    "memory": "On search results page",
-    "next_goal": "Click the first result"
-}"""
 
 		AGENT_PROMPT = f"""
     
-	You are an AI agent that helps users interact with websites. You receive a list of interactive elements from the current webpage and must respond with specific actions.
+	You are an expert AI agent that interacts with websites for users. You get a task as input and must interact with the internet until the task is complete.
+	You receive a list of interactive elements from the current webpage and must respond with one specific action.
 
 	INPUT FORMAT:
 	- You get processed html elements from the current webpage
@@ -53,26 +53,25 @@ class AgentSystemPrompt:
 	- Context elements are marked with underscore: "_: <div>Context text</div>"
 
 	Your RESPONSE FORMAT: 
-	{RESPONSE_FORMAT}
+	{self._get_response_format()}
 
 	Example:
-	{EXAMPLE_RESPONSE}
+	{self._get_example_response()}
 
 	AVAILABLE ACTIONS:
-    {self.default_action_description.__repr__()}
+    {self.default_action_description}
 
 
 	IMPORTANT RULES:
 	1. Only use element IDs that exist in the input list
-	2. Use extract_page_content to get more page information
-	3. If stuck, try alternative approaches or go back
+	3. If stuck, you can extract_page_content, go_back, refresh_page, or ask for human help
 	4. Ask for human help only when completely stuck
 	5. Use extract_page_content followed by done action to complete task
 	6. If an image is provided, use it for context
 	7. ALWAYS respond in this RESPONSE FORMAT with valid JSON:
-	8. If the page is empty use actions like "open_tab" or "go_to_url", "search_google"
+	8. If the page is empty use actions to do searches or go directly to the url
 
-	Remember: Choose EXACTLY ONE action per response. Invalid combinations or multiple actions will be rejected.
+	Remember: Choose EXACTLY ONE action per response. Invalid combinations or multiple actions will be rejected. Use exactly the parameters specified.
     """
 		return SystemMessage(content=AGENT_PROMPT)
 
@@ -85,7 +84,7 @@ class AgentMessagePrompt:
 		state_description = f"""
 Current url: {self.state.url}
 Available tabs:
-{self.state.tabs}
+{self.state.tab_infos}
 Interactive elements:
 {self.state.dom_items_to_string()}
         """
@@ -105,4 +104,7 @@ Interactive elements:
 		return HumanMessage(content=state_description)
 
 	def get_message_for_history(self) -> HumanMessage:
-		return HumanMessage(content=f'Step url: {self.state.url}')
+		if self.state.url in ['data:,', 'about:blank', '']:
+			return HumanMessage(content=f'Step url: {self.state.url} (empty page)')
+		else:
+			return HumanMessage(content=f'Step url: {self.state.url}')

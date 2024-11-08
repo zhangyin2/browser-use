@@ -22,13 +22,13 @@ AVAILABLE_ACTIONS: Dict[str, ActionDefinition] = {
 	'click_element': ActionDefinition(
 		description='Click on a page element',
 		params={
-			'element_id': 'ID of the element to click',
+			'index': 'ID of the element to click',
 			'num_clicks': 'Number of clicks (optional, default: 1)',
 		},
 	),
 	'input_text': ActionDefinition(
 		description='Input text into a field',
-		params={'element_id': 'ID of the input element', 'input_text': 'Text to enter'},
+		params={'index': 'ID of the input element', 'input_text': 'Text to enter'},
 	),
 	'nothing': ActionDefinition(description='Do nothing', params={}),
 	'go_to_url': ActionDefinition(
@@ -61,21 +61,27 @@ class ControllerAction(BaseModel):
 	params: dict[str, Any] = Field(default_factory=dict, description='Parameters for the action')
 
 
+class ClickElementControllerHistoryItem(BaseModel):
+	xpath: str | None
+	id: int | None
+	num_clicks: int | None
+
+
+class InputTextControllerHistoryItem(BaseModel):
+	xpath: str | None
+	id: int | None
+	input_text: str | None
+
+
 class ControllerActionResult(BaseModel):
-	done: bool
+	url: Optional[str] = None
+	is_done: bool = False
 	extracted_content: Optional[str] = None
 	error: Optional[str] = None
+	human_input: Optional[str] = None
+	clicked_element: Optional[ClickElementControllerHistoryItem] = None
+	inputed_element: Optional[InputTextControllerHistoryItem] = None
 
 
 class ControllerPageState(BrowserState):
 	screenshot: Optional[str] = None
-	tabs: list[dict] = []
-
-	def model_dump(self) -> dict:
-		dump = super().model_dump()
-		# Add a summary of available tabs
-		if self.tabs:
-			dump['available_tabs'] = [
-				f"Tab {i+1}: {tab['title']} ({tab['url']})" for i, tab in enumerate(self.tabs)
-			]
-		return dump

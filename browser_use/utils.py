@@ -4,12 +4,12 @@ from functools import wraps
 from typing import Any, Callable, Coroutine, ParamSpec, TypeVar
 
 # Configure root logger to ERROR to suppress third-party logs
-logging.getLogger().setLevel(logging.ERROR)
-logging.getLogger('WDM').setLevel(logging.ERROR)  # WebDriver Manager
-logging.getLogger('httpx').setLevel(logging.ERROR)  # HTTP requests
-logging.getLogger('selenium').setLevel(logging.ERROR)  # Selenium
-logging.getLogger('urllib3').setLevel(logging.ERROR)  # URLLib
-logging.getLogger('asyncio').setLevel(logging.ERROR)  # Asyncio
+# logging.getLogger().setLevel(logging.ERROR)
+# logging.getLogger('WDM').setLevel(logging.ERROR)  # WebDriver Manager
+# logging.getLogger('httpx').setLevel(logging.ERROR)  # HTTP requests
+# logging.getLogger('selenium').setLevel(logging.ERROR)  # Selenium
+# logging.getLogger('urllib3').setLevel(logging.ERROR)  # URLLib
+# logging.getLogger('asyncio').setLevel(logging.ERROR)  # Asyncio
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)

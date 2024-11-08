@@ -22,6 +22,13 @@ class ControllerService:
 
 	def __init__(self, keep_open: bool = False):
 		self.browser = BrowserService(keep_open=keep_open)
+		# check if all AVAILABLE_ACTIONS are implemented in the browser service
+		missing_actions = []
+		for action in AVAILABLE_ACTIONS:
+			if not hasattr(self.browser, action):
+				missing_actions.append(action)
+		if missing_actions:
+			raise ValueError(f'Actions not implemented in browser service: {missing_actions}')
 
 	def get_current_state(self, screenshot: bool = False) -> ControllerPageState:
 		return self.browser.get_current_state(screenshot=screenshot)
@@ -29,23 +36,17 @@ class ControllerService:
 	@time_execution_sync('--act')
 	def act(self, action: ControllerAction) -> ControllerActionResult:
 		try:
-			# Validate action exists in available actions
 			if action.action_type not in AVAILABLE_ACTIONS:
 				raise ValueError(f'Unknown action: {action.action_type}')
 
-			# Get the method from browser service
 			method = getattr(self.browser, action.action_type)
+			result: ControllerActionResult | None = method(**action.params)
 
-			# Call the method with the params
-			result = method(**action.params)
+			if result is None:
+				result = ControllerActionResult()
 
-			# Handle special return cases
-			if action.action_type == 'done':
-				return ControllerActionResult(done=True, extracted_content=result)
-			elif action.action_type == 'extract_page_content':
-				return ControllerActionResult(done=False, extracted_content=result)
-
-			return ControllerActionResult(done=False)
+			result.url = self.browser._get_current_url()
+			return result
 
 		except Exception as e:
-			return ControllerActionResult(done=False, error=f'Error executing action: {str(e)}')
+			return ControllerActionResult(error=f'Error executing action: {str(e)}')

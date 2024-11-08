@@ -28,7 +28,7 @@ async def main():
 		print('Action:', action)
 		print('Result:', result)
 
-		if result.done:
+		if result.is_done:
 			print('\n✅ Task completed successfully!')
 			print('Extracted content:', result.extracted_content)
 			break

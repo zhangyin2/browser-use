@@ -20,8 +20,13 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
-from browser_use.browser.views import BrowserState
-from browser_use.controller.views import ControllerPageState
+from browser_use.browser.views import BrowserState, TabInfo
+from browser_use.controller.views import (
+	ClickElementControllerHistoryItem,
+	ControllerActionResult,
+	ControllerPageState,
+	InputTextControllerHistoryItem,
+)
 from browser_use.dom.service import DomService
 from browser_use.utils import time_execution_sync
 
@@ -36,8 +41,8 @@ class BrowserService:
 		self._ob = Screenshot.Screenshot()
 		self.MINIMUM_WAIT_TIME = 0.5
 		self.MAXIMUM_WAIT_TIME = 5
-		self._current_handle = None  # Track current handle
-		self._tab_cache = {}
+		self._current_handle = None
+		self._tab_cache: dict[str, TabInfo] = {}
 		self.keep_open = keep_open
 		self.cached_state: BrowserState | None = None
 
@@ -110,6 +115,9 @@ class BrowserService:
 			self.driver = self.init()
 		return self.driver
 
+	def _get_current_url(self) -> str:
+		return self._get_driver().current_url
+
 	def wait_for_page_load(self):
 		"""
 		Ensures page is fully loaded before continuing.
@@ -152,6 +160,7 @@ class BrowserService:
 			selector_map=content.selector_map,
 			url=driver.current_url,
 			title=driver.title,
+			tab_infos=self._tab_cache,
 		)
 
 		return self.current_state
@@ -198,20 +207,29 @@ class BrowserService:
 		driver.refresh()
 		self.wait_for_page_load()
 
-	def extract_page_content(self, value: Literal['text', 'markdown'] = 'markdown') -> str:
+	def extract_page_content(
+		self, value: Literal['text', 'markdown'] = 'markdown'
+	) -> ControllerActionResult:
 		"""
 		TODO: switch to a better parser/extractor
 		"""
 		driver = self._get_driver()
 		content = MainContentExtractor.extract(driver.page_source, output_format=value)  # type: ignore TODO
-		return content
+		return ControllerActionResult(extracted_content=content)
 
-	def done(self, text: str):
+	def done(self, text: str) -> ControllerActionResult:
 		"""
 		Ends the task and waits for further instructions.
 		"""
 		logger.info(f'Done on page {self.current_state.url}\n\n: {text}')
-		return text
+		return ControllerActionResult(is_done=True, extracted_content=text)
+
+	def ask_human(self, question: str) -> ControllerActionResult:
+		"""
+		Ask for human help / information.
+		"""
+		answer = input(question)
+		return ControllerActionResult(human_input=answer)
 
 	def take_screenshot(self, full_page: bool = False) -> str:
 		"""
@@ -271,13 +289,16 @@ class BrowserService:
 				f'Failed to input text into element with xpath: {xpath}. Error: {str(e)}'
 			)
 
-	def input_text_by_index(self, index: int, text: str):
+	def input_text(self, index: int, text: str):
 		state = self.get_cached_state()
 		if index not in state.selector_map:
 			raise Exception(f'Element index {index} not found in selector map')
 		xpath = state.selector_map[index]
 		self._input_text_by_xpath(xpath, text)
 		logger.info(f'Input text into index {index}: xpath: {xpath}')
+		return ControllerActionResult(
+			inputed_element=InputTextControllerHistoryItem(xpath=xpath, input_text=text, id=index)
+		)
 
 	def _click_element_by_xpath(self, xpath: str):
 		"""
@@ -331,7 +352,7 @@ class BrowserService:
 			raise Exception(f'Failed to click element with xpath: {xpath}. Error: {str(e)}')
 
 	@time_execution_sync('--click')
-	def click_element_by_index(self, index: int, num_clicks: int = 1):
+	def click_element(self, index: int, num_clicks: int = 1):
 		"""
 		Clicks an element using its index from the selector map.
 		Can click multiple times if specified.
@@ -363,75 +384,63 @@ class BrowserService:
 		# Check if new tab was opened
 		current_handles = len(driver.window_handles)
 		if current_handles > initial_handles:
-			return self.handle_new_tab()
+			self.handle_new_tab()
 
-	def handle_new_tab(self) -> dict:
-		"""Handle newly opened tab and switch to it"""
+		return ControllerActionResult(
+			clicked_element=ClickElementControllerHistoryItem(
+				xpath=xpath, id=index, num_clicks=num_clicks
+			)
+		)
+
+	def handle_new_tab(self) -> None:
 		driver = self._get_driver()
 		handles = driver.window_handles
-		new_handle = handles[-1]  # Get most recently opened handle
+		new_handle = handles[-1]
 
-		# Switch to new tab
 		driver.switch_to.window(new_handle)
-		self._current_handle = new_handle  # Update current handle
-
-		# Wait for page load
+		self._current_handle = new_handle
 		self.wait_for_page_load()
 
-		# Get and cache tab info
-		tab_info = {
-			'handle': new_handle,
-			'url': driver.current_url,
-			'title': driver.title,
-			'is_current': True,
-		}
-		self._tab_cache[new_handle] = tab_info
+		# Create TabInfo instance
+		self._tab_cache[new_handle] = TabInfo(
+			handle=new_handle, url=driver.current_url, title=driver.title, is_current=True
+		)
 
-		# Update is_current for all tabs
+		# Update is_current for other tabs
 		for handle in self._tab_cache:
-			self._tab_cache[handle]['is_current'] = handle == new_handle
+			self._tab_cache[handle].is_current = handle == new_handle
 
-		return tab_info
-
-	def get_tabs_info(self) -> list[dict]:
-		"""Get information about all tabs"""
+	def get_tabs_info(self) -> dict[str, TabInfo]:
 		driver = self._get_driver()
 		current_handle = driver.current_window_handle
-		self._current_handle = current_handle  # Update current handle
+		self._current_handle = current_handle
 
-		tabs_info = []
+		tabs_info: dict[str, TabInfo] = {}
 		for handle in driver.window_handles:
 			is_current = handle == current_handle
 
-			# Use cached info if available, otherwise get new info
 			if handle in self._tab_cache:
 				tab_info = self._tab_cache[handle]
-				tab_info['is_current'] = is_current
+				tab_info.is_current = is_current
 			else:
 				# Only switch if we need to get info
 				if not is_current:
 					driver.switch_to.window(handle)
-				tab_info = {
-					'handle': handle,
-					'url': driver.current_url,
-					'title': driver.title,
-					'is_current': is_current,
-				}
+				tab_info = TabInfo(
+					handle=handle, url=driver.current_url, title=driver.title, is_current=is_current
+				)
 				self._tab_cache[handle] = tab_info
 
-			tabs_info.append(tab_info)
+			tabs_info[handle] = tab_info
 
-		# Switch back to current tab if we moved
 		if driver.current_window_handle != current_handle:
 			driver.switch_to.window(current_handle)
 
 		return tabs_info
 
-	def switch_tab(self, handle: str) -> dict:
-		"""Switch to specified tab and return its info"""
+	def switch_tab(self, handle: str) -> None:
 		driver = self._get_driver()
 
-		# Verify handle exists
 		if handle not in driver.window_handles:
 			raise ValueError(f'Tab handle {handle} not found')
 
@@ -439,24 +448,20 @@ class BrowserService:
 		current_handle = driver.current_window_handle
 		if handle != current_handle:
 			driver.switch_to.window(handle)
-			# Wait for tab to be ready
 			self.wait_for_page_load()
 
-		# Update and return tab info
-		tab_info = {
-			'handle': handle,
-			'url': driver.current_url,
-			'title': driver.title,
-			'is_current': True,
-		}
-		self._tab_cache[handle] = tab_info
-		return tab_info
+		self._tab_cache[handle] = TabInfo(
+			handle=handle, url=driver.current_url, title=driver.title, is_current=True
+		)
 
-	def open_tab(self, url: str):
+	def open_new_tab(self, url: str) -> None:
 		driver = self._get_driver()
 		driver.execute_script(f'window.open("{url}", "_blank");')
 		self.wait_for_page_load()
-		return self.handle_new_tab()
+		self.handle_new_tab()
+
+	def nothing(self) -> None:
+		pass
 
 	@time_execution_sync('--get_cached_state')
 	def get_cached_state(self, force_update: bool = False) -> BrowserState:
@@ -466,7 +471,6 @@ class BrowserService:
 
 	def get_current_state(self, screenshot: bool = False) -> ControllerPageState:
 		browser_state = self.get_cached_state(force_update=True)
-		tabs = self.get_tabs_info()
 
 		screenshot_b64 = None
 		if screenshot:
@@ -478,5 +482,5 @@ class BrowserService:
 			title=browser_state.title,
 			selector_map=browser_state.selector_map,
 			screenshot=screenshot_b64,
-			tabs=tabs,
+			tab_infos=self._tab_cache,
 		)

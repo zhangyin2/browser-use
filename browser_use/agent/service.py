@@ -1,32 +1,26 @@
 import json
-import logging
+import os
+from typing import Any
 
 from dotenv import load_dotenv
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from pydantic import BaseModel
 
 from browser_use.agent.prompts import AgentMessagePrompt, AgentSystemPrompt
 from browser_use.agent.views import (
 	AgentHistory,
 	AgentOutput,
-	ClickElementControllerHistoryItem,
-	InputTextControllerHistoryItem,
-	Output,
 )
 from browser_use.controller.service import ControllerService
 from browser_use.controller.views import (
+	AVAILABLE_ACTIONS,
 	ControllerActionResult,
-	ControllerActions,
 	ControllerPageState,
 )
-from browser_use.utils import time_execution_async
+from browser_use.utils import logger, time_execution_async
 
 load_dotenv()
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-	level=logging.INFO,
-	force=True,  # Prevent changing root logger config
-)
 
 
 class AgentService:
@@ -71,7 +65,7 @@ class AgentService:
 
 		self.action_history: list[AgentHistory] = []
 
-	async def run(self, max_steps: int = 100):
+	async def run(self, max_steps: int = 100) -> tuple[ControllerActionResult, list[AgentHistory]]:
 		"""
 		Execute the task.
 
@@ -86,17 +80,17 @@ class AgentService:
 			for i in range(max_steps):
 				logger.info(f'\n📍 Step {i+1}')
 
-				action, result = await self.step()
+				history_item, result = await self.step()
 
-				if result.done:
+				if result.is_done:
 					logger.info('\n✅ Task completed successfully')
 					logger.info(f'Extracted content: \n{result.extracted_content}')
-					return action.done, self.action_history
+					return result, self.action_history
 
 			logger.info('\n' + '=' * 50)
 			logger.info('❌ Failed to complete task in maximum steps')
 			logger.info('=' * 50)
-			return None, self.action_history
+			return result, self.action_history
 		finally:
 			if not self.controller_injected:
 				self.controller.browser.close()
@@ -105,105 +99,100 @@ class AgentService:
 	async def step(self) -> tuple[AgentHistory, ControllerActionResult]:
 		state = self.controller.get_current_state(screenshot=self.use_vision)
 		action = await self.get_next_action(state)
-
-		if action.ask_human and action.ask_human.question:
-			action = await self._take_human_input(action.ask_human.question)
-
 		result = self.controller.act(action)
-		self.n += 1
 
 		if result.error:
 			self.messages.append(HumanMessage(content=f'Error: {result.error}'))
-
+			logger.debug(f'Trying again because of error: {result.error}')
 		if result.extracted_content:
 			self.messages.append(
 				HumanMessage(content=f'Extracted content:\n {result.extracted_content}')
 			)
+		if result.human_input:
+			self.messages.append(HumanMessage(content=result.human_input))
 
 		# Convert action to history and update click/input fields if present
-		history_item = self._make_history_item(action, state)
+		history_item = self._make_history_item(action, result)
 		self.action_history.append(history_item)
+		self.n += 1
 
 		return history_item, result
 
-	def _make_history_item(self, action: AgentOutput, state: ControllerPageState) -> AgentHistory:
-		return AgentHistory(
-			search_google=action.search_google,
-			go_to_url=action.go_to_url,
-			nothing=action.nothing,
-			go_back=action.go_back,
-			done=action.done,
-			click_element=ClickElementControllerHistoryItem(
-				id=action.click_element.id, xpath=state.selector_map.get(action.click_element.id)
-			)
-			if action.click_element and state.selector_map.get(action.click_element.id)
-			else None,
-			input_text=InputTextControllerHistoryItem(
-				id=action.input_text.id,
-				xpath=state.selector_map.get(action.input_text.id),
-				text=action.input_text.text,
-			)
-			if action.input_text and state.selector_map.get(action.input_text.id)
-			else None,
-			extract_page_content=action.extract_page_content,
-			switch_tab=action.switch_tab,
-			open_tab=action.open_tab,
-			ask_human=action.ask_human,
-			url=state.url,
+	def _make_history_item(
+		self, action: AgentOutput, result: ControllerActionResult
+	) -> AgentHistory:
+		# Create base history item
+		history = AgentHistory(
+			action_type=action.action_type,
+			params=action.params,
+			valuation=action.valuation,
+			memory=action.memory,
+			next_goal=action.next_goal,
+			url=result.url,
+			is_done=result.is_done,
+			extracted_content=result.extracted_content,
+			error=result.error,
+			human_input=result.human_input,
+			clicked_element=result.clicked_element,
+			inputed_element=result.inputed_element,
 		)
 
-	async def _take_human_input(self, question: str) -> AgentOutput:
-		if self.allow_terminal_input:
-			human_input = input(f'\nHi, your input is required: {question}\n\n')
-		else:
-			logger.info(
-				f'Terminal input requested but not allowed. Set allow_terminal_input=True to enable. Question of agent: {question}'
-			)
-			human_input = (
-				'Human input not allowed, make assumptions for uncertainty and try yourself.'
-			)
-
-		logger.info('-' * 50)
-		self.messages.append(HumanMessage(content=human_input))
-
-		structured_llm = self.llm.with_structured_output(AgentOutput)
-
-		action: AgentOutput = await structured_llm.ainvoke(self.messages)  # type: ignore
-
-		self.messages.append(AIMessage(content=action.model_dump_json()))
-
-		return action
+		return history
 
 	@time_execution_async('--get_next_action')
 	async def get_next_action(self, state: ControllerPageState) -> AgentOutput:
-		# TODO: include state, actions, etc.
-
 		new_message = AgentMessagePrompt(state).get_user_message()
-		logger.debug(f'current tabs: {state.tabs}')
 		input_messages = self.messages + [new_message]
+		structured_llm = self.llm.with_structured_output(AgentOutput, include_raw=True)
 
-		structured_llm = self.llm.with_structured_output(Output, include_raw=False)
+		# TODO: handle connection error
+		response: dict[str, Any] | BaseModel = await structured_llm.ainvoke(input_messages)
 
-		#
-		response: Output = await structured_llm.ainvoke(input_messages)  # type: ignore
+		# include_raw = True -> dict
+		if isinstance(response, dict):
+			parsed_response: AgentOutput | None = response['parsed']
+			raw_response = response['raw'].content
+			parsing_error = response['parsing_error']
+
+			if parsed_response is None:  # try to parse the raw response as Output
+				try:
+					parsed_response = AgentOutput.model_validate_json(raw_response)
+				except Exception as e:
+					raise ValueError(
+						f'No parsed response from the model raw response: {raw_response} \n with parsing error: {parsing_error}'
+					) from e
+			if parsing_error:
+				logger.debug(f'Parsing error in get_next_action: {parsing_error}')
+
+		elif isinstance(response, AgentOutput):
+			# include_raw = False -> BaseModel
+			parsed_response = response
 
 		# Only append the output message
 		history_new_message = AgentMessagePrompt(state).get_message_for_history()
 		self.messages.append(history_new_message)
-		self.messages.append(AIMessage(content=response.model_dump_json(exclude_unset=True)))
-		logger.info(
-			f'\nThought: {response.current_state.model_dump_json(exclude_unset=True, indent=4)}'
-		)
-		logger.info(f'Next action: {response.action.model_dump_json(exclude_unset=True)}')
-		self._save_conversation(input_messages, response)
 
-		return response.action
+		self.messages.append(AIMessage(content=parsed_response.model_dump_json()))
+		logger.info(f'Response: {parsed_response.model_dump_json(indent=2)}\n')
+		self._save_conversation(input_messages, parsed_response)
+
+		return parsed_response
 
 	def _get_action_description(self) -> str:
-		return AgentOutput.description()
+		"""Get action descriptions from AVAILABLE_ACTIONS"""
+		descriptions = []
+		for action_name, action_def in AVAILABLE_ACTIONS.items():
+			desc = [f'\n{action_name}: {action_def.description}']
+			if action_def.params:
+				desc.append('  Parameters:')
+				for param, param_desc in action_def.params.items():
+					desc.append(f'    - {param}: {param_desc}')
+			descriptions.append('\n'.join(desc))
+		return '\n'.join(descriptions)
 
-	def _save_conversation(self, input_messages: list[BaseMessage], response: Output):
+	def _save_conversation(self, input_messages: list[BaseMessage], response: AgentOutput):
 		if self.save_conversation_path is not None:
+			os.makedirs(self.save_conversation_path, exist_ok=True)
 			with open(self.save_conversation_path + f'_{self.n}.txt', 'w') as f:
 				# Write messages with proper formatting
 				for message in input_messages:

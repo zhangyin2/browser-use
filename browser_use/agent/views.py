@@ -1,31 +1,17 @@
-from typing import Optional
+from pydantic import Field
 
-from pydantic import BaseModel, Field
-
-from browser_use.controller.views import (
-	ControllerAction,
-)
+from browser_use.controller.views import ControllerAction, ControllerActionResult
 
 
 class AgentOutput(ControllerAction):
-	valuation: str = Field(description='Result of previous action')
-	memory: str = Field(description='Current progress state')
-	next_goal: str = Field(description='Next immediate goal')
+	valuation: str = Field(
+		description='Valuation of last action, e.g. "Failed to click x because ..."'
+	)
+	memory: str = Field(
+		description='Memory of the overall task, e.g. "Found 3/10 results. 1. ... 2. ... 3. ..."'
+	)
+	next_goal: str = Field(description='Next concrete immediate goal achievable by the next action')
 
 
-class ClickElementControllerHistoryItem(BaseModel):
-	xpath: str | None
-	id: str | None
-	num_clicks: int | None
-
-
-class InputTextControllerHistoryItem(BaseModel):
-	xpath: str | None
-	id: str | None
-	input_text: str | None
-
-
-class AgentHistory(AgentOutput):
-	click_element: Optional[ClickElementControllerHistoryItem] = None
-	input_text: Optional[InputTextControllerHistoryItem] = None
-	url: str
+class AgentHistory(AgentOutput, ControllerActionResult):  # ControllerPageState
+	pass
