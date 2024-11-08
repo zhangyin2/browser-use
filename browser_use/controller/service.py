@@ -1,8 +1,8 @@
 from browser_use.browser.service import BrowserService
-from browser_use.browser.views import BrowserState
 from browser_use.controller.views import (
+	AVAILABLE_ACTIONS,
+	ControllerAction,
 	ControllerActionResult,
-	ControllerActions,
 	ControllerPageState,
 )
 from browser_use.utils import time_execution_sync
@@ -22,71 +22,28 @@ class ControllerService:
 
 	def __init__(self, keep_open: bool = False):
 		self.browser = BrowserService(keep_open=keep_open)
-		self.cached_browser_state: BrowserState | None = None
-
-	@time_execution_sync('--get_cached_browser_state')
-	def get_cached_browser_state(self, force_update: bool = False) -> BrowserState:
-		if self.cached_browser_state is None or force_update:
-			self.cached_browser_state = self.browser.get_updated_state()
-			return self.cached_browser_state
-
-		return self.cached_browser_state
-		# return self.browser.get_updated_state()
 
 	def get_current_state(self, screenshot: bool = False) -> ControllerPageState:
-		browser_state = self.get_cached_browser_state(force_update=True)
-
-		# Get tab information without switching
-		tabs = self.browser.get_tabs_info()
-
-		screenshot_b64 = None
-		if screenshot:
-			screenshot_b64 = self.browser.take_screenshot()
-
-		return ControllerPageState(
-			items=browser_state.items,
-			url=browser_state.url,
-			title=browser_state.title,
-			selector_map=browser_state.selector_map,
-			screenshot=screenshot_b64,
-			tabs=tabs,
-		)
+		return self.browser.get_current_state(screenshot=screenshot)
 
 	@time_execution_sync('--act')
-	def act(self, action: ControllerActions) -> ControllerActionResult:
+	def act(self, action: ControllerAction) -> ControllerActionResult:
 		try:
-			current_state = self.get_cached_browser_state(force_update=False)
+			# Validate action exists in available actions
+			if action.action_type not in AVAILABLE_ACTIONS:
+				raise ValueError(f'Unknown action: {action.action_type}')
 
-			if action.search_google:
-				self.browser.search_google(action.search_google.query)
-			elif action.switch_tab:
-				self.browser.switch_tab(action.switch_tab.handle)
-			elif action.open_tab:
-				self.browser.open_tab(action.open_tab.url)
-			elif action.go_to_url:
-				self.browser.go_to_url(action.go_to_url.url)
-			elif action.nothing:
-				# self.browser.nothing()
-				# TODO: implement
-				pass
-			elif action.go_back:
-				self.browser.go_back()
-			elif action.done:
-				self.browser.done(action.done.text)
-				return ControllerActionResult(done=True, extracted_content=action.done.text)
-			elif action.click_element:
-				self.browser.click_element_by_index(
-					action.click_element.id, current_state, action.click_element.clicks
-				)
-			elif action.input_text:
-				self.browser.input_text_by_index(
-					action.input_text.id, action.input_text.text, current_state
-				)
-			elif action.extract_page_content:
-				content = self.browser.extract_page_content()
-				return ControllerActionResult(done=False, extracted_content=content)
-			else:
-				raise ValueError(f'Unknown action: {action}')
+			# Get the method from browser service
+			method = getattr(self.browser, action.action_type)
+
+			# Call the method with the params
+			result = method(**action.params)
+
+			# Handle special return cases
+			if action.action_type == 'done':
+				return ControllerActionResult(done=True, extracted_content=result)
+			elif action.action_type == 'extract_page_content':
+				return ControllerActionResult(done=False, extracted_content=result)
 
 			return ControllerActionResult(done=False)
 

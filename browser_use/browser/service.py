@@ -21,6 +21,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
 
 from browser_use.browser.views import BrowserState
+from browser_use.controller.views import ControllerPageState
 from browser_use.dom.service import DomService
 from browser_use.utils import time_execution_sync
 
@@ -38,6 +39,7 @@ class BrowserService:
 		self._current_handle = None  # Track current handle
 		self._tab_cache = {}
 		self.keep_open = keep_open
+		self.cached_state: BrowserState | None = None
 
 	def init(self) -> webdriver.Chrome:
 		"""
@@ -269,10 +271,10 @@ class BrowserService:
 				f'Failed to input text into element with xpath: {xpath}. Error: {str(e)}'
 			)
 
-	def input_text_by_index(self, index: int, text: str, state: BrowserState):
+	def input_text_by_index(self, index: int, text: str):
+		state = self.get_cached_state()
 		if index not in state.selector_map:
 			raise Exception(f'Element index {index} not found in selector map')
-
 		xpath = state.selector_map[index]
 		self._input_text_by_xpath(xpath, text)
 		logger.info(f'Input text into index {index}: xpath: {xpath}')
@@ -329,11 +331,12 @@ class BrowserService:
 			raise Exception(f'Failed to click element with xpath: {xpath}. Error: {str(e)}')
 
 	@time_execution_sync('--click')
-	def click_element_by_index(self, index: int, state: BrowserState, num_clicks: int = 1):
+	def click_element_by_index(self, index: int, num_clicks: int = 1):
 		"""
 		Clicks an element using its index from the selector map.
 		Can click multiple times if specified.
 		"""
+		state = self.get_cached_state()
 		if index not in state.selector_map:
 			raise Exception(f'Element index {index} not found in selector map')
 
@@ -454,3 +457,26 @@ class BrowserService:
 		driver.execute_script(f'window.open("{url}", "_blank");')
 		self.wait_for_page_load()
 		return self.handle_new_tab()
+
+	@time_execution_sync('--get_cached_state')
+	def get_cached_state(self, force_update: bool = False) -> BrowserState:
+		if self.cached_state is None or force_update:
+			self.cached_state = self.get_updated_state()
+		return self.cached_state
+
+	def get_current_state(self, screenshot: bool = False) -> ControllerPageState:
+		browser_state = self.get_cached_state(force_update=True)
+		tabs = self.get_tabs_info()
+
+		screenshot_b64 = None
+		if screenshot:
+			screenshot_b64 = self.take_screenshot()
+
+		return ControllerPageState(
+			items=browser_state.items,
+			url=browser_state.url,
+			title=browser_state.title,
+			selector_map=browser_state.selector_map,
+			screenshot=screenshot_b64,
+			tabs=tabs,
+		)

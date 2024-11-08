@@ -19,18 +19,29 @@ class AgentSystemPrompt:
 		# 		output_format = """
 		# {"valuation_previous_goal": "Success if completed, else short sentence of why not successful.", "goal": "short description what you want to achieve", "action": "action_name", "params": {"param_name": "param_value"}}
 		#     """
-		RESPONSE_FORMAT = """{{
-			"current_state": {{
-				"valuation_previous_goal": "String describing if previous action succeeded or failed",
-				"memory": "String to store progress information",
-				"next_goal": "String describing your next immediate goal"
-			}},
-			"action": {{
-				// EXACTLY ONE of the following available actions must be specified
-			}}
-		}}"""
+		RESPONSE_FORMAT = """
+{
+    "action_type": "action_name",    // Required: one of the available actions
+    "params": {                      // Required: parameters for the action
+        "param1": "value1",
+        "param2": "value2"
+    },
+    "valuation": "previous result",  // Required: result of previous action
+    "memory": "current progress",    // Required: current state
+    "next_goal": "next goal"         // Required: immediate next goal
+}"""
 
-		EXAMPLE_RESPONSE = """{"current_state": {"valuation_previous_goal": "Success", "memory": "User is on the homepage, we found already 3/7 jobs", "next_goal": "Click on the next job"}, "action": {"click_element": {"id": 44,"num_clicks": 1}}}"""
+		EXAMPLE_RESPONSE = """
+{
+    "action_type": "click_element",
+    "params": {
+        "element_id": 44,
+        "num_clicks": 1
+    },
+    "valuation": "Found the search result",
+    "memory": "On search results page",
+    "next_goal": "Click the first result"
+}"""
 
 		AGENT_PROMPT = f"""
     

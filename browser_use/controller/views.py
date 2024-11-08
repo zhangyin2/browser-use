@@ -1,83 +1,64 @@
-from typing import Literal, Optional
+from typing import Any, Dict, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from browser_use.browser.views import BrowserState
 
 
-class SearchGoogleControllerAction(BaseModel):
-	query: str
+class ActionDefinition(BaseModel):
+	"""Defines a single action and its parameters"""
+
+	description: str
+	params: dict[str, str] = Field(
+		default_factory=dict, description='Parameter name to description mapping'
+	)
 
 
-class GoToUrlControllerAction(BaseModel):
-	url: str
+# Define available actions
+AVAILABLE_ACTIONS: Dict[str, ActionDefinition] = {
+	'search_google': ActionDefinition(
+		description='Search Google for a query', params={'query': 'The search terms to use'}
+	),
+	'click_element': ActionDefinition(
+		description='Click on a page element',
+		params={
+			'element_id': 'ID of the element to click',
+			'num_clicks': 'Number of clicks (optional, default: 1)',
+		},
+	),
+	'input_text': ActionDefinition(
+		description='Input text into a field',
+		params={'element_id': 'ID of the input element', 'input_text': 'Text to enter'},
+	),
+	'nothing': ActionDefinition(description='Do nothing', params={}),
+	'go_to_url': ActionDefinition(
+		description='Navigate to a URL', params={'url': 'The URL to navigate to'}
+	),
+	'go_back': ActionDefinition(description='Go back to the previous page', params={}),
+	'extract_page_content': ActionDefinition(description='Get the page content', params={}),
+	'open_new_tab': ActionDefinition(
+		description='Open a new tab', params={'url': 'The URL to navigate to'}
+	),
+	'switch_tab': ActionDefinition(
+		description='Switch to a tab',
+		params={'handle': 'The handle of the existing tab to switch to'},
+	),
+	'done': ActionDefinition(
+		description='Complete the task', params={'text': 'Final result of the task'}
+	),
+	'ask_human': ActionDefinition(
+		description='Ask for human help / information', params={'text': 'Question to ask'}
+	),
+}
 
 
-class ClickElementControllerAction(BaseModel):
-	id: int
-	num_clicks: int = 1
+class ControllerAction(BaseModel):
+	"""The actual action to execute"""
 
-
-class InputTextControllerAction(BaseModel):
-	id: int
-	text: str
-
-
-class DoneControllerAction(BaseModel):
-	text: str
-
-
-class SwitchTabControllerAction(BaseModel):
-	handle: str  # The window handle to switch to
-
-
-class OpenTabControllerAction(BaseModel):
-	url: str
-
-
-class ControllerActions(BaseModel):
-	"""
-	Controller actions you can use to interact.
-	"""
-
-	search_google: Optional[SearchGoogleControllerAction] = None
-	go_to_url: Optional[GoToUrlControllerAction] = None
-	nothing: Optional[Literal[True]] = None
-	go_back: Optional[Literal[True]] = None
-	done: Optional[DoneControllerAction] = None
-	click_element: Optional[ClickElementControllerAction] = None
-	input_text: Optional[InputTextControllerAction] = None
-	extract_page_content: Optional[Literal[True]] = None
-	switch_tab: Optional[SwitchTabControllerAction] = None
-	open_tab: Optional[OpenTabControllerAction] = None
-
-	@staticmethod
-	def description() -> str:
-		"""
-		Returns a human-readable description of available actions.
-		"""
-		return """
-- Search Google:
-   {"search_google": {"query": "Your search query"}}
-- Navigate to URL:
-   {"go_to_url": {"url": "https://example.com"}}
-- Wait/Do nothing:
-   {"nothing": true}
-- Go back:
-   {"go_back": true}
-- Click an interactive element by its given ID and number how many times you want to click it (default is 1):
-   {"click_element": {"id": 1, "num_clicks": 2}}
-- Input text into an interactive element by its ID:
-   {"input_text": {"id": 1, "text": "Your text"}}
-- Get page content:
-   {"extract_page_content": true}
-- Open new tab:
-   {"open_tab": {"url": "https://example.com"}}
-- Switch tab:
-   {"switch_tab": {"handle": "tab-id"}}
-- Complete task:
-   {"done": {"text": "Final result message"}}
-"""
+	action_type: str = Field(
+		description=f'Type of action to perform from {list(AVAILABLE_ACTIONS.keys())}'
+	)
+	params: dict[str, Any] = Field(default_factory=dict, description='Parameters for the action')
 
 
 class ControllerActionResult(BaseModel):
@@ -88,7 +69,7 @@ class ControllerActionResult(BaseModel):
 
 class ControllerPageState(BrowserState):
 	screenshot: Optional[str] = None
-	tabs: list[dict] = []  # Add tabs info to state
+	tabs: list[dict] = []
 
 	def model_dump(self) -> dict:
 		dump = super().model_dump()

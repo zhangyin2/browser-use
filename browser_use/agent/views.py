@@ -3,45 +3,26 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from browser_use.controller.views import (
-	ClickElementControllerAction,
-	ControllerActions,
-	InputTextControllerAction,
+	ControllerAction,
 )
 
 
-class AskHumanAgentAction(BaseModel):
-	question: str = Field(description='Question to the human')
+class AgentOutput(ControllerAction):
+	valuation: str = Field(description='Result of previous action')
+	memory: str = Field(description='Current progress state')
+	next_goal: str = Field(description='Next immediate goal')
 
 
-class AgentState(BaseModel):
-	valuation_previous_goal: str = Field(
-		default='', description='Valuation if the previous goal was successful or what went wrong'
-	)
-	memory: str = Field(default='', description='Memory of the current state')
-	next_goal: str = Field(default='', description='Description of the next immediate goal')
-
-
-class AgentOnlyAction(BaseModel):
-	ask_human: Optional[AskHumanAgentAction] = Field(
-		default=None, description='Ask for human help / information'
-	)
-
-
-class AgentOutput(ControllerActions, AgentOnlyAction):
-	pass
-
-
-class Output(BaseModel):
-	current_state: AgentState
-	action: AgentOutput
-
-
-class ClickElementControllerHistoryItem(ClickElementControllerAction):
+class ClickElementControllerHistoryItem(BaseModel):
 	xpath: str | None
+	id: str | None
+	num_clicks: int | None
 
 
-class InputTextControllerHistoryItem(InputTextControllerAction):
+class InputTextControllerHistoryItem(BaseModel):
 	xpath: str | None
+	id: str | None
+	input_text: str | None
 
 
 class AgentHistory(AgentOutput):
