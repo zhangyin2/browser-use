@@ -12,7 +12,7 @@ from typing import Any, Callable, Coroutine, ParamSpec, TypeVar
 # logging.getLogger('asyncio').setLevel(logging.ERROR)  # Asyncio
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(levelname)-8s %(message)s')

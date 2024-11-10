@@ -3,15 +3,13 @@ Generic validation service for browser automation tasks.
 """
 
 import json
-import logging
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from langchain_core.language_models import BaseLanguageModel
 from langchain_core.messages import HumanMessage
 
 from browser_use.browser.views import BrowserState
-
-logger = logging.getLogger(__name__)
+from browser_use.utils import logger
 
 
 class ValidationService:

@@ -14,7 +14,7 @@ from browser_use.agent.views import (
 )
 from browser_use.controller.service import ControllerService
 from browser_use.controller.views import (
-	AVAILABLE_ACTIONS,
+	ControllerAction,
 	ControllerActionResult,
 	ControllerPageState,
 )
@@ -32,6 +32,7 @@ class AgentService:
 		use_vision: bool = True,
 		save_conversation_path: str | None = None,
 		allow_terminal_input: bool = True,
+		include_format: bool = True,
 	):
 		"""
 		Agent service.
@@ -41,6 +42,7 @@ class AgentService:
 			llm (AvailableModel): Model to be used.
 			controller (ControllerService | None): You can reuse an existing or (automatically) create a new one.
 			allow_terminal_input (bool): Flag to allow or disallow terminal input to resolve uncertanty or if the agent is stuck.
+			include_format (bool): Flag to always include the response format in the messages.
 		"""
 		self.task = task
 		self.use_vision = use_vision
@@ -51,12 +53,13 @@ class AgentService:
 
 		self.llm = llm
 		system_prompt = AgentSystemPrompt(
-			task, default_action_description=self._get_action_description()
+			task, default_action_description=ControllerAction._get_action_description()
 		).get_system_message()
 
 		# Init messages
 		first_message = HumanMessage(content=f'Your task is: {task}')
 		self.messages: list[BaseMessage] = [system_prompt, first_message]
+		self.include_format = include_format
 		self.n = 0
 
 		self.save_conversation_path = save_conversation_path
@@ -84,7 +87,7 @@ class AgentService:
 
 				if result.is_done:
 					logger.info('\n✅ Task completed successfully')
-					logger.info(f'Extracted content: \n{result.extracted_content}')
+					# logger.info(f'Extracted content: \n{result.extracted_content}')
 					return result, self.action_history
 
 			logger.info('\n' + '=' * 50)
@@ -102,14 +105,16 @@ class AgentService:
 		result = self.controller.act(action)
 
 		if result.error:
-			self.messages.append(HumanMessage(content=f'Error: {result.error}'))
+			self.messages.append(
+				HumanMessage(content=f'Error: {result.error}  stick to the rules and try again')
+			)
 			logger.debug(f'Trying again because of error: {result.error}')
 		if result.extracted_content:
 			self.messages.append(
 				HumanMessage(content=f'Extracted content:\n {result.extracted_content}')
 			)
 		if result.human_input:
-			self.messages.append(HumanMessage(content=result.human_input))
+			self.messages.append(HumanMessage(content=f'Human input: {result.human_input}'))
 
 		# Convert action to history and update click/input fields if present
 		history_item = self._make_history_item(action, result)
@@ -141,7 +146,9 @@ class AgentService:
 
 	@time_execution_async('--get_next_action')
 	async def get_next_action(self, state: ControllerPageState) -> AgentOutput:
-		new_message = AgentMessagePrompt(state).get_user_message()
+		new_message = AgentMessagePrompt(
+			state, self.task, include_format=self.include_format
+		).get_user_message()
 		input_messages = self.messages + [new_message]
 		structured_llm = self.llm.with_structured_output(AgentOutput, include_raw=True)
 
@@ -169,26 +176,14 @@ class AgentService:
 			parsed_response = response
 
 		# Only append the output message
-		history_new_message = AgentMessagePrompt(state).get_message_for_history()
+		history_new_message = AgentMessagePrompt(state, self.task).get_message_for_history()
 		self.messages.append(history_new_message)
 
-		self.messages.append(AIMessage(content=parsed_response.model_dump_json()))
+		self.messages.append(HumanMessage(content=parsed_response.model_dump_json()))
 		logger.info(f'Response: {parsed_response.model_dump_json(indent=2)}\n')
 		self._save_conversation(input_messages, parsed_response)
 
 		return parsed_response
-
-	def _get_action_description(self) -> str:
-		"""Get action descriptions from AVAILABLE_ACTIONS"""
-		descriptions = []
-		for action_name, action_def in AVAILABLE_ACTIONS.items():
-			desc = [f'\n{action_name}: {action_def.description}']
-			if action_def.params:
-				desc.append('  Parameters:')
-				for param, param_desc in action_def.params.items():
-					desc.append(f'    - {param}: {param_desc}')
-			descriptions.append('\n'.join(desc))
-		return '\n'.join(descriptions)
 
 	def _save_conversation(self, input_messages: list[BaseMessage], response: AgentOutput):
 		if self.save_conversation_path is not None:

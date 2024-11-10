@@ -55,7 +55,19 @@ def validator(llm):
 
 
 @pytest.mark.asyncio
-async def test_random_samples(test_cases: List[Dict[str, Any]], llm, controller, validator):
+async def test_prompt(llm: ChatOpenAI, controller: ControllerService, validator: ValidationService):
+	prompt = 'Go to united and book a flight for july 2025 to new york.'
+	agent = AgentService(prompt, llm, controller, use_vision=True, allow_terminal_input=False)
+
+	final_result = await agent.run()
+
+	logger.info(f'Final result: {final_result}')
+
+
+@pytest.mark.asyncio
+async def test_random_samples(
+	test_cases: List[Dict[str, Any]], llm, controller, validator: ValidationService
+):
 	"""Test a random sampling of tasks across different websites"""
 	import random
 
@@ -77,7 +89,7 @@ async def test_random_samples(test_cases: List[Dict[str, Any]], llm, controller,
 			action, result = await agent.step()
 			logger.debug(f'Action: {action}')
 
-			if result.done:
+			if result.is_done:
 				final_result = result
 				logger.info(f'Task completed in {step + 1} steps')
 				break

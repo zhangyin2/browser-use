@@ -1,9 +1,10 @@
+from anthropic import BaseModel
 from pydantic import Field
 
 from browser_use.controller.views import ControllerAction, ControllerActionResult
 
 
-class AgentOutput(ControllerAction):
+class AgentBrain(BaseModel):
 	valuation: str = Field(
 		description='Valuation of last action, e.g. "Failed to click x because ..."'
 	)
@@ -13,5 +14,22 @@ class AgentOutput(ControllerAction):
 	next_goal: str = Field(description='Next concrete immediate goal achievable by the next action')
 
 
+class AgentOutput(ControllerAction, AgentBrain):  # order is important
+	pass
+
+
 class AgentHistory(AgentOutput, ControllerActionResult):  # ControllerPageState
 	pass
+
+
+if __name__ == '__main__':
+	# check order of fields
+	print(
+		AgentOutput(
+			next_goal='',
+			action_type='',
+			valuation='',
+			memory='',
+		)
+	)
+	# run with: python -m browser_use.agent.views

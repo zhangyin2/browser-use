@@ -28,10 +28,7 @@ from browser_use.controller.views import (
 	InputTextControllerHistoryItem,
 )
 from browser_use.dom.service import DomService
-from browser_use.utils import time_execution_sync
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+from browser_use.utils import logger, time_execution_sync
 
 
 class BrowserService:
@@ -292,7 +289,9 @@ class BrowserService:
 	def input_text(self, index: int, text: str):
 		state = self.get_cached_state()
 		if index not in state.selector_map:
-			raise Exception(f'Element index {index} not found in selector map')
+			raise Exception(
+				f'index {index} not found in selector map for input_text. Only use indices that are available in the excracted content.'
+			)
 		xpath = state.selector_map[index]
 		self._input_text_by_xpath(xpath, text)
 		logger.info(f'Input text into index {index}: xpath: {xpath}')
@@ -359,7 +358,9 @@ class BrowserService:
 		"""
 		state = self.get_cached_state()
 		if index not in state.selector_map:
-			raise Exception(f'Element index {index} not found in selector map')
+			raise Exception(
+				f'index {index} not found in selector map for click_element. Only use indices that are available in the excracted content.'
+			)
 
 		xpath = state.selector_map[index]
 		driver = self._get_driver()
@@ -459,9 +460,6 @@ class BrowserService:
 		driver.execute_script(f'window.open("{url}", "_blank");')
 		self.wait_for_page_load()
 		self.handle_new_tab()
-
-	def nothing(self) -> None:
-		pass
 
 	@time_execution_sync('--get_cached_state')
 	def get_cached_state(self, force_update: bool = False) -> BrowserState:

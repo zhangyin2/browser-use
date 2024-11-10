@@ -22,17 +22,16 @@ AVAILABLE_ACTIONS: Dict[str, ActionDefinition] = {
 	'click_element': ActionDefinition(
 		description='Click on a page element',
 		params={
-			'index': 'ID of the element to click',
+			'index': 'Index of the element to click from the list of interactive elements',
 			'num_clicks': 'Number of clicks (optional, default: 1)',
 		},
 	),
 	'input_text': ActionDefinition(
 		description='Input text into a field',
-		params={'index': 'ID of the input element', 'input_text': 'Text to enter'},
-	),
-	'nothing': ActionDefinition(description='Do nothing', params={}),
-	'go_to_url': ActionDefinition(
-		description='Navigate to a URL', params={'url': 'The URL to navigate to'}
+		params={
+			'index': 'Index of the input element from the list of interactive elements',
+			'input_text': 'Text to enter',
+		},
 	),
 	'go_back': ActionDefinition(description='Go back to the previous page', params={}),
 	'extract_page_content': ActionDefinition(description='Get the page content', params={}),
@@ -44,10 +43,12 @@ AVAILABLE_ACTIONS: Dict[str, ActionDefinition] = {
 		params={'handle': 'The handle of the existing tab to switch to'},
 	),
 	'done': ActionDefinition(
-		description='Complete the task', params={'text': 'Final result of the task'}
+		description='Call this when you are done with the task and want to return the result',
+		params={'text': 'Final result of the task'},
 	),
 	'ask_human': ActionDefinition(
-		description='Ask for human help / information', params={'text': 'Question to ask'}
+		description='Ask for human help / information / clarification',
+		params={'text': 'Question to ask'},
 	),
 }
 
@@ -59,6 +60,19 @@ class ControllerAction(BaseModel):
 		description=f'Type of action to perform from {list(AVAILABLE_ACTIONS.keys())}'
 	)
 	params: dict[str, Any] = Field(default_factory=dict, description='Parameters for the action')
+
+	@staticmethod
+	def _get_action_description() -> str:
+		"""Get action descriptions from AVAILABLE_ACTIONS"""
+		descriptions = []
+		for action_name, action_def in AVAILABLE_ACTIONS.items():
+			desc = [f'\n{action_name}: {action_def.description}']
+			if action_def.params:
+				desc.append('  Parameters:')
+				for param, param_desc in action_def.params.items():
+					desc.append(f'    - {param}: {param_desc}')
+			descriptions.append('\n'.join(desc))
+		return '\n'.join(descriptions)
 
 
 class ClickElementControllerHistoryItem(BaseModel):
