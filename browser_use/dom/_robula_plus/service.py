@@ -1,19 +1,10 @@
 import re
-from typing import Dict, List, Optional
+from typing import List, Optional
 
-from playwright.async_api import ElementHandle, JSHandle, Page
+from bs4 import BeautifulSoup, Tag
 
 
 class RobulaPlusOptions:
-	"""
-	Options for configuring the Robula Plus algorithm.
-
-	default values:
-
-	@param `attribute_prioritization_list = ['name', 'class', 'title', 'alt', 'value']`
-	@param `attribute_blacklist = ['href', 'src', 'onclick', 'onload', 'tabindex', 'width', 'height', 'style', 'size', 'maxlength']`
-	"""
-
 	def __init__(
 		self,
 		attribute_prioritization_list: Optional[List[str]] = None,
@@ -21,7 +12,6 @@ class RobulaPlusOptions:
 	):
 		self.attribute_prioritization_list: List[str] = attribute_prioritization_list or [
 			'name',
-			# 'class',
 			'title',
 			'alt',
 			'value',
@@ -42,8 +32,6 @@ class RobulaPlusOptions:
 
 
 class XPath:
-	"""A class representing an XPath expression."""
-
 	def __init__(self, value: str) -> None:
 		self.value: str = value
 
@@ -76,113 +64,92 @@ class XPath:
 
 
 class RobulaPlus:
-	"""
-	Main class implementing the Robula Plus algorithm.
-	"""
-
-	def __init__(self, options: Optional[RobulaPlusOptions] = None) -> None:
+	def __init__(self, options: Optional[RobulaPlusOptions] = None):
 		if options is None:
 			options = RobulaPlusOptions()
-		self.attribute_prioritization_list: List[str] = options.attribute_prioritization_list
-		self.attribute_blacklist: List[str] = options.attribute_blacklist
+		self.attribute_prioritization_list = options.attribute_prioritization_list
+		self.attribute_blacklist = options.attribute_blacklist
 
-	async def get_robust_xpath(self, element: ElementHandle, page: Page) -> str:
+	def get_robust_xpath(self, soup: BeautifulSoup, element: Tag, current_xpath: str) -> str:
 		"""Returns an optimized robust XPath locator string."""
-		is_contained = await page.evaluate('(element) => document.body.contains(element)', element)
-		if not is_contained:
-			raise ValueError('Document does not contain given element!')
-
 		xpath_list: List[XPath] = [XPath('//*')]
+
 		while xpath_list:
 			xpath = xpath_list.pop(0)
-			print('Trying:', xpath.value)
+			print(f'Current XPath: {xpath.get_value()}')
 			temp: List[XPath] = []
 
 			# Apply transformations
-			temp.extend(await self.transf_convert_star(xpath, element))
-			temp.extend(await self.transf_add_id(xpath, element))
-			temp.extend(await self.transf_add_text(xpath, element))
-			temp.extend(await self.transf_add_attribute(xpath, element))
-			temp.extend(await self.transf_add_attribute_set(xpath, element))
-			temp.extend(await self.transf_add_position(xpath, element))
-			temp.extend(await self.transf_add_level(xpath, element))
+			temp.extend(self.transf_convert_star(xpath, element))
+			temp.extend(self.transf_add_id(xpath, element))
+			temp.extend(self.transf_add_text(xpath, element))
+			temp.extend(self.transf_add_attribute(xpath, element))
+			temp.extend(self.transf_add_attribute_set(xpath, element))
+			temp.extend(self.transf_add_position(xpath, element, soup))
+			temp.extend(self.transf_add_level(xpath, element))
 
 			# Remove duplicates
 			temp = list({x.get_value(): x for x in temp}.values())
 
 			for x in temp:
-				if await self.uniquely_locate(x.get_value(), element, page):
+				if self.uniquely_locate(x.get_value(), element, soup):
 					return x.get_value()
 				xpath_list.append(x)
 
 		raise RuntimeError('Failed to generate robust XPath')
 
-	async def uniquely_locate(self, xpath: str, element: ElementHandle, page: Page) -> bool:
+	def uniquely_locate(self, xpath: str, target_element: Tag, soup: BeautifulSoup) -> bool:
 		"""Determines whether an XPath uniquely identifies the given element."""
-		elements = await page.query_selector_all(xpath)
-		if len(elements) != 1:
-			return False
-
-		# Compare elements using isSameElement
 		try:
-			return await elements[0].evaluate('(el, other) => el === other', element)
+			# Using bs4's select with a CSS selector converted from XPath
+			elements = soup.select(self.xpath_to_css(xpath))
+			return len(elements) == 1 and elements[0] is target_element
 		except Exception:
 			return False
 
-	async def get_element_by_xpath(self, xpath: str, page: Page) -> Optional[ElementHandle]:
-		"""Returns the element located by the given XPath."""
-		return await page.query_selector(xpath)
-
-	async def get_ancestor(self, element: ElementHandle, index: int) -> ElementHandle | JSHandle:
+	def get_ancestor(self, element: Tag, index: int) -> Tag:
 		"""Gets the ancestor element at the specified index."""
 		current = element
 		for _ in range(index):
-			parent = await current.evaluate_handle('el => el.parentElement')
-			if not parent:
+			parent = current.parent
+			if not parent or not isinstance(parent, Tag):
 				raise ValueError('Ancestor index out of bounds')
 			current = parent
 		return current
 
-	async def get_ancestor_count(self, element: ElementHandle) -> int:
+	def get_ancestor_count(self, element: Tag) -> int:
 		"""Gets the number of ancestors for the element."""
 		count = 0
 		current = element
 		while True:
-			try:
-				parent = await current.evaluate_handle('el => el.parentElement')
-				if not parent or await parent.evaluate('el => el === null'):
-					break
-				count += 1
-				current = ElementHandle(parent)
-			except Exception:
+			parent = current.parent
+			if not parent or not isinstance(parent, Tag):
 				break
+			count += 1
+			current = parent
 		return count
 
-	async def transf_convert_star(self, xpath: XPath, element: ElementHandle) -> List[XPath]:
+	def transf_convert_star(self, xpath: XPath, element: Tag) -> List[XPath]:
 		"""Transforms * to specific tag name."""
 		output: List[XPath] = []
-		ancestor = await self.get_ancestor(element, xpath.get_length() - 1)
 		if xpath.starts_with('//*'):
-			tag_name = await ancestor.evaluate('el => el.tagName.toLowerCase()')
+			tag_name = element.name.lower()
 			output.append(XPath('//' + tag_name + xpath.substring(3)))
 		return output
 
-	async def transf_add_id(self, xpath: XPath, element: ElementHandle) -> List[XPath]:
+	def transf_add_id(self, xpath: XPath, element: Tag) -> List[XPath]:
 		"""Adds ID predicate if available."""
 		output: List[XPath] = []
-		ancestor = await self.get_ancestor(element, xpath.get_length() - 1)
-		element_id = await ancestor.evaluate('el => el.id')
-		if element_id and not xpath.head_has_any_predicates():
+		if 'id' in element.attrs and not xpath.head_has_any_predicates():
 			new_xpath = XPath(xpath.get_value())
-			new_xpath.add_predicate_to_head(f"[@id='{element_id}']")
+			new_xpath.add_predicate_to_head(f"[@id='{element['id']}']")
 			output.append(new_xpath)
 		return output
 
-	async def transf_add_text(self, xpath: XPath, element: ElementHandle) -> List[XPath]:
+	def transf_add_text(self, xpath: XPath, element: Tag) -> List[XPath]:
 		"""Adds text predicate if available."""
 		output: List[XPath] = []
-		ancestor = await self.get_ancestor(element, xpath.get_length() - 1)
-		text_content = await ancestor.evaluate('el => el.textContent')
+		text_content = element.get_text(strip=True)
 		if (
 			text_content
 			and not xpath.head_has_position_predicate()
@@ -193,28 +160,19 @@ class RobulaPlus:
 			output.append(new_xpath)
 		return output
 
-	async def transf_add_attribute(self, xpath: XPath, element: ElementHandle) -> List[XPath]:
+	def transf_add_attribute(self, xpath: XPath, element: Tag) -> List[XPath]:
 		"""Adds attribute predicates."""
 		output: List[XPath] = []
 		if not xpath.head_has_any_predicates():
-			ancestor = await self.get_ancestor(element, xpath.get_length() - 1)
-			attributes = await ancestor.evaluate("""el => {
-                const attrs = {};
-                for (const attr of el.attributes) {
-                    attrs[attr.name] = attr.value;
-                }
-                return attrs;
-            }""")
-
 			# Add priority attributes first
 			for attr_name in self.attribute_prioritization_list:
-				if attr_name in attributes:
+				if attr_name in element.attrs:
 					new_xpath = XPath(xpath.get_value())
-					new_xpath.add_predicate_to_head(f"[@{attr_name}='{attributes[attr_name]}']")
+					new_xpath.add_predicate_to_head(f"[@{attr_name}='{element[attr_name]}']")
 					output.append(new_xpath)
 
 			# Add remaining non-blacklisted attributes
-			for attr_name, attr_value in attributes.items():
+			for attr_name, attr_value in element.attrs.items():
 				if (
 					attr_name not in self.attribute_blacklist
 					and attr_name not in self.attribute_prioritization_list
@@ -222,68 +180,52 @@ class RobulaPlus:
 					new_xpath = XPath(xpath.get_value())
 					new_xpath.add_predicate_to_head(f"[@{attr_name}='{attr_value}']")
 					output.append(new_xpath)
-
 		return output
 
-	async def transf_add_position(self, xpath: XPath, element: ElementHandle) -> List[XPath]:
+	def transf_add_position(self, xpath: XPath, element: Tag, soup: BeautifulSoup) -> List[XPath]:
 		"""Adds position predicate."""
 		output: List[XPath] = []
 		if not xpath.head_has_position_predicate():
-			ancestor = await self.get_ancestor(element, xpath.get_length() - 1)
-			position = await ancestor.evaluate(
-				"""(el, isStarXPath) => {
-                const parent = el.parentNode;
-                if (isStarXPath) {
-                    return Array.from(parent.children).indexOf(el) + 1;
-                } else {
-                    let pos = 1;
-                    for (const child of parent.children) {
-                        if (el === child) break;
-                        if (el.tagName === child.tagName) pos++;
-                    }
-                    return pos;
-                }
-            }""",
-				xpath.starts_with('//*'),
-			)
-			new_xpath = XPath(xpath.get_value())
-			new_xpath.add_predicate_to_head(f'[{position}]')
-			output.append(new_xpath)
+			parent = element.parent
+			if parent:
+				if xpath.starts_with('//*'):
+					position = 1 + len([s for s in element.previous_siblings if isinstance(s, Tag)])
+				else:
+					position = 1 + len(
+						[
+							s
+							for s in element.previous_siblings
+							if isinstance(s, Tag) and s.name == element.name
+						]
+					)
+				new_xpath = XPath(xpath.get_value())
+				new_xpath.add_predicate_to_head(f'[{position}]')
+				output.append(new_xpath)
 		return output
 
-	async def transf_add_level(self, xpath: XPath, element: ElementHandle) -> List[XPath]:
+	def transf_add_level(self, xpath: XPath, element: Tag) -> List[XPath]:
 		"""Adds level transformation."""
 		output: List[XPath] = []
-		ancestor_count = await self.get_ancestor_count(element)
+		ancestor_count = self.get_ancestor_count(element)
 		if xpath.get_length() - 1 < ancestor_count:
 			output.append(XPath('//*' + xpath.substring(1)))
 		return output
 
-	async def transf_add_attribute_set(self, xpath: XPath, element: ElementHandle) -> List[XPath]:
+	def transf_add_attribute_set(self, xpath: XPath, element: Tag) -> List[XPath]:
 		"""Adds attribute set predicates."""
 		output: List[XPath] = []
 		if not xpath.head_has_any_predicates():
-			ancestor = await self.get_ancestor(element, xpath.get_length() - 1)
-			attributes = await ancestor.evaluate("""el => {
-                return Array.from(el.attributes)
-                    .map(attr => ({name: attr.name, value: attr.value}));
-            }""")
-
-			# Filter out blacklisted attributes
 			attributes = [
-				attr for attr in attributes if attr['name'] not in self.attribute_blacklist
+				{'name': name, 'value': value}
+				for name, value in element.attrs.items()
+				if name not in self.attribute_blacklist
 			]
 
-			# Generate power set of attributes
 			power_set = self._generate_power_set(attributes)
-
-			# Filter and sort attribute sets
 			power_set = [s for s in power_set if len(s) >= 2]
+
 			for attr_set in power_set:
 				attr_set.sort(key=lambda x: self._get_attribute_priority(x['name']))
-
-			# Create XPath predicates
-			for attr_set in power_set:
 				predicate = self._create_attribute_set_predicate(attr_set)
 				new_xpath = XPath(xpath.get_value())
 				new_xpath.add_predicate_to_head(predicate)
@@ -291,7 +233,7 @@ class RobulaPlus:
 
 		return output
 
-	def _generate_power_set(self, attributes: List[Dict[str, str]]) -> List[List[Dict[str, str]]]:
+	def _generate_power_set(self, attributes: List[dict]) -> List[List[dict]]:
 		"""Generates power set of attributes."""
 		result = [[]]
 		for attr in attributes:
@@ -305,7 +247,16 @@ class RobulaPlus:
 		except ValueError:
 			return len(self.attribute_prioritization_list)
 
-	def _create_attribute_set_predicate(self, attr_set: List[Dict[str, str]]) -> str:
+	def _create_attribute_set_predicate(self, attr_set: List[dict]) -> str:
 		"""Creates an XPath predicate from an attribute set."""
 		conditions = [f"@{attr['name']}='{attr['value']}'" for attr in attr_set]
 		return f"[{' and '.join(conditions)}]"
+
+	def xpath_to_css(self, xpath: str) -> str:
+		"""Convert XPath to CSS selector for BS4 compatibility."""
+		# This is a simplified conversion - you may need to expand it
+		# based on your specific XPath patterns
+		css = xpath.replace('//', ' ')
+		css = re.sub(r'\[@([^=]+)=\'([^\']+)\'\]', r'[\1="\2"]', css)
+		css = css.strip()
+		return css

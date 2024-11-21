@@ -1,5 +1,7 @@
 import time
 
+from bs4 import BeautifulSoup
+
 from browser_use.browser.service import Browser
 from browser_use.dom._robula_plus.service import RobulaPlus
 from browser_use.dom.service import DomService
@@ -16,15 +18,19 @@ async def test_robula_xpath_generation():
 	# Wait for page to load
 	time.sleep(3)
 
+	content = await page.content()
+	soup = BeautifulSoup(content, 'html.parser')
+
 	# Let's get a specific element (e.g., the search button) and generate its Robula+ xpath
-	element = await page.query_selector(
-		'xpath=/html/body/div[4]/div/div[2]/div/div/div[3]/div/div[1]/button[1]/div'
+	current_xpath = '/html/body/div[4]/div/div[2]/div/div/div[3]/div/div[1]/button[1]/div'
+	element = soup.select_one(
+		'button.RxNS.RxNS-mod-stretch.RxNS-mod-variant-outline[role="button"]'
 	)
 
 	if element is None:
 		raise ValueError('Element not found')
 
-	robula_xpath = await robula_service.get_robust_xpath(element, page)
+	robula_xpath = robula_service.get_robust_xpath(soup, element, current_xpath)
 
 	print(f'Generated Robula+ XPath: {robula_xpath}')
 
