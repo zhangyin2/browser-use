@@ -8,7 +8,8 @@ import os
 import sys
 
 from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
+from pydantic import SecretStr
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -26,6 +27,13 @@ def get_llm(provider: str):
 		)
 	elif provider == 'openai':
 		return ChatOpenAI(model='gpt-4o', temperature=0.0)
+	elif provider == 'azure-openai':
+		return AzureChatOpenAI(
+			api_version='2024-10-21',
+			model='gpt-4o',
+			azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT', ''),
+			api_key=SecretStr(os.getenv('AZURE_OPENAI_KEY', '')),
+		)
 	else:
 		raise ValueError(f'Unsupported provider: {provider}')
 
@@ -35,7 +43,7 @@ parser.add_argument('query', type=str, help='The query to process')
 parser.add_argument(
 	'--provider',
 	type=str,
-	choices=['openai', 'anthropic'],
+	choices=['openai', 'anthropic', 'azure-openai'],
 	default='openai',
 	help='The model provider to use (default: openai)',
 )
