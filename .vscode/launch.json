@@ -58,6 +58,19 @@
             ],
             "console": "integratedTerminal",
             "justMyCode": false
+        },
+        {
+            "name": "Python: Debug Stress Tests",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "args": [
+                "tests/test_stress.py",
+                "-v",
+                "--capture=no",
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
         }
     ]
 }
