@@ -128,6 +128,7 @@ class Agent:
 
 		try:
 			model_output = await self.get_next_action(state)
+
 			result = self.controller.act(model_output.action)
 			if result.extracted_content:
 				logger.info(f'📄 Result: {result.extracted_content}')
@@ -154,29 +155,35 @@ class Agent:
 		prefix = f'❌ Result failed {self.consecutive_failures + 1}/{self.max_failures} times:\n '
 
 		if isinstance(error, (ValidationError, ValueError)):
-			logger.error(f'{prefix}{error_msg}')
+			logger.error(f'{prefix}{error_msg}', exc_info=True)
 			self.consecutive_failures += 1
 		elif isinstance(error, RateLimitError):
-			logger.warning(f'{prefix}{error_msg}')
+			logger.warning(f'{prefix}{error_msg}', exc_info=True)
 			time.sleep(self.retry_delay)
 			self.consecutive_failures += 1
 		else:
-			logger.error(f'{prefix}{error_msg}')
+			logger.error(f'{prefix}{error_msg}', exc_info=True)
 			self.consecutive_failures += 1
 
 		return ActionResult(error=error_msg, include_in_memory=True)
 
 	def _update_messages_with_result(self, result: ActionResult) -> None:
 		"""Update message history with action results"""
-		l = len(self.messages)
-		if result.include_in_memory:
-			if result.extracted_content:
-				self.messages.append(HumanMessage(content=result.extracted_content))
-			if result.error:
-				self.messages.append(HumanMessage(content=result.error))
+		# Filter out all human messages not included in memory
+		self.messages = [
+			msg
+			for msg in self.messages
+			if not isinstance(msg, HumanMessage) or msg.include_in_memory
+		]
 
-		# if no update make empty message
-		if len(self.messages) == l:
+		# Always include result in messages
+		if result.extracted_content:
+			self.messages.append(HumanMessage(content=result.extracted_content))
+		if result.error:
+			self.messages.append(HumanMessage(content=result.error))
+
+		# If no update make empty message
+		if not result.extracted_content and not result.error:
 			self.messages.append(HumanMessage(content=''))
 
 	def _make_history_item(
@@ -192,25 +199,25 @@ class Agent:
 	@time_execution_sync('--cut_input_messages')
 	def _cut_input_messages(self, input_messages: list[BaseMessage]) -> list[BaseMessage]:
 		"""Cut input messages to max input tokens"""
-
 		# NOTE: Tools are not included in token count for now
 		token_count = self._calc_token_count(input_messages)
-		# error checking if first and last message are too long together
 
 		# check system message too long
 		if token_count[0] > self.max_input_tokens:
 			raise ValueError('System message is too long')
 
 		# check current message too long
-		if token_count[0] + token_count[-1] > self.max_input_tokens:
+		if sum([token_count[0], token_count[1], token_count[-1]]) > self.max_input_tokens:
 			current_message = input_messages[-1]
 			system_message = input_messages[0]
+			goal_message = input_messages[1]
 
 			# cut current message
-			available_tokens = self.max_input_tokens - token_count[0]
+			available_tokens = self.max_input_tokens - token_count[0] - token_count[1]
 
 			# binary search to find the longest message that can be cut
 			message_content = get_buffer_string([current_message])
+
 			low = 0
 			high = len(current_message.content)
 			while low < high:
@@ -220,15 +227,15 @@ class Agent:
 				else:
 					low = mid + 1
 			current_message.content = current_message.content[:low]
-			input_messages = [system_message, current_message]
-			self.messages = [system_message]
+			input_messages = [system_message, goal_message, current_message]
+			self.messages = [system_message, goal_message]
 			return input_messages
 
-		# remove messages from 1 to -2 until token count is less than max input tokens
-		while sum(token_count) > self.max_input_tokens:
-			token_count.pop(1)
-			input_messages.pop(1)
-			logger.debug(f'Cutting history message to reduce token count: {input_messages[1]}')
+		# remove messages from 2 to -2 until token count is less than max input tokens
+		while sum(token_count) > self.max_input_tokens and len(token_count) > 3:
+			token_count.pop(2)
+			input_messages.pop(2)
+			logger.debug(f'Cutting history message to reduce token count')
 
 		# update messages
 		self.messages = input_messages[:-1]
@@ -237,7 +244,21 @@ class Agent:
 
 	def _calc_token_count(self, messages: list[BaseMessage]) -> list[int]:
 		"""Calculate token count of messages"""
-		return [self.llm.get_num_tokens(get_buffer_string([m])) for m in messages]
+
+		def get_message_tokens(m: BaseMessage) -> int:
+			if isinstance(m.content, list):
+				total = 0
+				for item in m.content:
+					if isinstance(item, dict) and item.get('type') == 'image_url':
+						total += (
+							765  # Token count for images with gpt-4o for our screen size 1280x1024
+						)
+					elif isinstance(item, dict) and item.get('type') == 'text':
+						total += self.llm.get_num_tokens(item.get('text', ''))
+				return total
+			return self.llm.get_num_tokens(get_buffer_string([m]))
+
+		return [get_message_tokens(m) for m in messages]
 
 	@time_execution_async('--get_next_action')
 	async def get_next_action(self, state: BrowserState) -> AgentOutput:
@@ -245,12 +266,14 @@ class Agent:
 		new_message = AgentMessagePrompt(state).get_user_message()
 		input_messages = self.messages + [new_message]
 
+		input_messages = self._cut_input_messages(input_messages)
+
 		structured_llm = self.llm.with_structured_output(self.AgentOutput, include_raw=True)
 		response: dict[str, Any] = await structured_llm.ainvoke(input_messages)  # type: ignore
 
 		parsed: AgentOutput = response['parsed']
 
-		self._update_message_history(response)
+		self._update_message_history(parsed)
 		self._log_response(parsed)
 		self._save_conversation(input_messages, parsed)
 		self.n_steps += 1
@@ -383,11 +406,11 @@ class Agent:
 				f'🔢 Last  Tokens: input: {current_tokens.input_tokens} (cached: {current_tokens.input_token_details.cache_read}) + output: {current_tokens.output_tokens} = {current_tokens.total_tokens} '
 			)
 
-	def _update_message_history(self, response: Any) -> None:
+	def _update_message_history(self, response: AgentOutput) -> None:
 		"""Update message history with new interactions"""
 		self.messages.append(AIMessage(content=response.model_dump_json(exclude_unset=True)))
 
-	def _log_response(self, response: Any) -> None:
+	def _log_response(self, response: AgentOutput) -> None:
 		"""Log the model's response"""
 		if 'Success' in response.current_state.valuation_previous_goal:
 			emoji = '👍'
@@ -401,7 +424,7 @@ class Agent:
 		logger.info(f'🎯 Next Goal: {response.current_state.next_goal}')
 		logger.info(f'🛠️ Action: {response.action.model_dump_json(exclude_unset=True)}')
 
-	def _save_conversation(self, input_messages: list[BaseMessage], response: Any) -> None:
+	def _save_conversation(self, input_messages: list[BaseMessage], response: AgentOutput) -> None:
 		"""Save conversation history to file if path is specified"""
 		if not self.save_conversation_path:
 			return
@@ -431,7 +454,7 @@ class Agent:
 
 			f.write('\n')
 
-	def _write_response_to_file(self, f: Any, response: Any) -> None:
+	def _write_response_to_file(self, f: Any, response: AgentOutput) -> None:
 		"""Write model response to conversation file"""
 		f.write(' RESPONSE\n')
 		f.write(json.dumps(json.loads(response.model_dump_json(exclude_unset=True)), indent=2))
