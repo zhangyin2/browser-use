@@ -9,7 +9,7 @@ import os
 from langchain_openai import AzureChatOpenAI
 from pydantic import SecretStr
 
-from browser_use.agent.service import Agent
+from browser_use import Agent, SystemPrompt
 from browser_use.browser.browser import Browser, BrowserConfig, BrowserContextConfig
 
 browser = Browser(
@@ -36,6 +36,18 @@ llm = AzureChatOpenAI(
 	api_key=SecretStr(os.getenv('AZURE_OPENAI_KEY', '')),
 )
 
+
+class CustomSystemPrompt(SystemPrompt):
+	def important_rules(self) -> str:
+		existing_rules = super().important_rules()
+		new_rules = """
+9. EXTRA RULES:
+- assume that children are 10 years old
+- make sure to scroll down to find all filters the task requires
+"""
+		return f'{existing_rules}\n{new_rules}'
+
+
 # TASK = """
 # Find the lowest-priced one-way flight from Cairo to Montreal on February 21, 2025, including the total travel time and number of stops. on https://www.google.com/travel/flights/
 # """
@@ -50,6 +62,7 @@ async def main():
 	agent = Agent(
 		task=TASK,
 		llm=llm,
+		system_prompt_class=CustomSystemPrompt,
 		browser=browser,
 		validate_output=True,
 	)

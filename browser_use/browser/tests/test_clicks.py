@@ -60,7 +60,22 @@ async def test_highlight_elements():
 						print(f'Count: {count}\n')
 
 				print(list(state.selector_map.keys()), 'Selector map keys')
-				print(state.element_tree.clickable_elements_to_string())
+				print(
+					state.element_tree.clickable_elements_to_string(
+						include_attributes=[
+							'title',
+							'type',
+							'name',
+							'role',
+							'tabindex',
+							'aria-label',
+							'placeholder',
+							'value',
+							'alt',
+							'aria-expanded',
+						]
+					)
+				)
 				action = input('Select next action: ')
 
 				await time_execution_sync('remove_highlight_elements')(context.remove_highlights)()
