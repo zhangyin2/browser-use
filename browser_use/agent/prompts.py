@@ -221,3 +221,17 @@ class ValidateOutputPrompt:
 		)
 
 		return SystemMessage(content=system_msg)
+
+
+class TryAgainPrompt:
+	def __init__(self, task: str):
+		self.task = task
+
+	def get_system_message(self) -> HumanMessage:
+		return HumanMessage(
+			content=f"""You have failed the task. The browser state has been lost. Please try again from scratch, try not to use the same actions as before and skip the obvious mistakes from before.
+
+(Only) in the next `evaluation_previous_goal` try to find the reason you failed the task and explain what you could do differently this time.
+			
+For the reference, the task is: {self.task}"""
+		)

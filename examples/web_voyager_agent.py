@@ -18,9 +18,9 @@ browser = Browser(
 		disable_security=True,
 		new_context_config=BrowserContextConfig(
 			disable_security=True,
-			wait_for_network_idle_page_load_time=3,
+			wait_for_network_idle_page_load_time=1,
 			# minimum_wait_page_load_time=3,  # 3 on prod
-			maximum_wait_page_load_time=10,  # 20 on prod
+			maximum_wait_page_load_time=5,  # 20 on prod
 			# no_viewport=True,
 			browser_window_size={
 				'width': 1280,
@@ -49,17 +49,17 @@ llm = AzureChatOpenAI(
 # 		return f'{existing_rules}\n{new_rules}'
 
 
-# TASK = """
-# Find the lowest-priced one-way flight from Cairo to Montreal on February 21, 2025, including the total travel time and number of stops. on https://www.google.com/travel/flights/
-# """
+TASK = """
+Find the lowest-priced one-way flight from Cairo to Montreal on February 21, 2025, including the total travel time and number of stops. on https://www.google.com/travel/flights/
+"""
 # TASK = """
 # Browse Coursera, which universities offer Master of Advanced Study in Engineering degrees? Tell me what is the latest application deadline for this degree? on https://www.coursera.org/"""
 # TASK = """
 # Find the most recent sports analysis article on BBC News related to the English Premier League and summarize its key insights. on https://www.bbc.com/news/
 # """
-TASK = """
-Find the most recent sports analysis article on BBC News related to the English Premier League and summarize its key insights. on https://www.bbc.com/news/
-"""
+# TASK = """
+# Find the most recent sports analysis article on BBC News related to the English Premier League and summarize its key insights. on https://www.bbc.com/news/
+# """
 
 
 async def main():
@@ -70,7 +70,7 @@ async def main():
 		browser=browser,
 		validate_output=True,
 	)
-	history = await agent.run(max_steps=50)
+	history = await agent.run(max_steps=30)
 	history.save_to_file('./tmp/history.json')
 
 

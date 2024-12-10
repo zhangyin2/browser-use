@@ -169,6 +169,10 @@ class MessageManager:
 		metadata = MessageMetadata(input_tokens=token_count)
 		self.history.add_message(message, metadata)
 
+	def force_inject_message(self, message: BaseMessage) -> None:
+		"""Force inject a message to the history"""
+		self.history.add_message(message, MessageMetadata(input_tokens=0))
+
 	def _count_tokens(self, message: BaseMessage) -> int:
 		"""Count tokens in a message using the model's tokenizer"""
 		tokens = 0

@@ -18,7 +18,12 @@ from openai import RateLimitError
 from pydantic import BaseModel, ValidationError
 
 from browser_use.agent.message_manager.service import MessageManager
-from browser_use.agent.prompts import AgentMessagePrompt, SystemPrompt, ValidateOutputPrompt
+from browser_use.agent.prompts import (
+	AgentMessagePrompt,
+	SystemPrompt,
+	TryAgainPrompt,
+	ValidateOutputPrompt,
+)
 from browser_use.agent.views import (
 	ActionResult,
 	AgentError,
@@ -80,6 +85,7 @@ class Agent:
 		],
 		max_error_length: int = 400,
 		max_actions_per_step: int = 10,
+		max_run_retries: int = 2,
 	):
 		self.agent_id = str(uuid.uuid4())  # unique identifier for the agent
 
@@ -136,6 +142,7 @@ class Agent:
 
 		# Tracking variables
 		self.run_retries = 0
+		self.max_run_retries = max_run_retries
 		self.history: AgentHistoryList = AgentHistoryList(history=[])
 		self.n_steps = 1
 		self.consecutive_failures = 0
@@ -332,23 +339,35 @@ class Agent:
 				)
 			)
 
+			success = False
 			for step in range(max_steps):
-				if self._too_many_failures():
+				# Check for too many consecutive failures
+				if self.consecutive_failures >= self.max_failures:
+					logger.error(f'❌ Stopping due to {self.max_failures} consecutive failures')
+					# Let retry remain True to trigger run_try_again
 					break
 
 				await self.step()
 
 				if self.history.is_done():
-					if (
-						self.validate_output and step < max_steps - 1
-					):  # if last step, we dont need to validate
+					if self.validate_output:
 						if not await self._validate_output():
+							logger.info('⚠️ Validation failed, continuing execution')
 							continue
 
+					# Task completed successfully and validated (if validation was required)
 					logger.info('✅ Task completed successfully')
+					success = True
 					break
-			else:
-				logger.info('❌ Failed to complete task in maximum steps')
+
+			if not success:
+				if self.consecutive_failures >= self.max_failures:
+					# logger.info('🔄 Retrying due to too many consecutive failures')
+					pass
+				else:
+					logger.info('❌ Failed to complete task in maximum steps')
+
+				return await self._run_try_again(max_steps)
 
 			return self.history
 
@@ -367,12 +386,22 @@ class Agent:
 			if not self.injected_browser and self.browser:
 				await self.browser.close()
 
-	def _too_many_failures(self) -> bool:
-		"""Check if we should stop due to too many failures"""
-		if self.consecutive_failures >= self.max_failures:
-			logger.error(f'❌ Stopping due to {self.max_failures} consecutive failures')
-			return True
-		return False
+	async def _run_try_again(self, max_steps: int) -> AgentHistoryList:
+		"""Run the task again"""
+		if self.run_retries >= self.max_run_retries:
+			logger.info('❌ Stopping due to too many task run retries')
+			return self.history
+
+		self.n_steps = 1
+		self.consecutive_failures = 0
+
+		logger.info(f'🔄 Retrying task {self.run_retries + 1}/{self.max_run_retries}')
+
+		self.message_manager.force_inject_message(TryAgainPrompt(self.task).get_system_message())
+
+		self.run_retries += 1
+		await self.browser_context.reset_state()
+		return await self.run(max_steps)
 
 	async def _validate_output(self) -> bool:
 		"""Validate the output of the last action is what the user wanted"""
