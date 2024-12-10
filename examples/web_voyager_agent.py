@@ -49,9 +49,9 @@ llm = AzureChatOpenAI(
 # 		return f'{existing_rules}\n{new_rules}'
 
 
-TASK = """
-Find the lowest-priced one-way flight from Cairo to Montreal on February 21, 2025, including the total travel time and number of stops. on https://www.google.com/travel/flights/
-"""
+# TASK = """
+# Find the lowest-priced one-way flight from Cairo to Montreal on February 21, 2025, including the total travel time and number of stops. on https://www.google.com/travel/flights/
+# """
 # TASK = """
 # Browse Coursera, which universities offer Master of Advanced Study in Engineering degrees? Tell me what is the latest application deadline for this degree? on https://www.coursera.org/"""
 # TASK = """
@@ -60,6 +60,9 @@ Find the lowest-priced one-way flight from Cairo to Montreal on February 21, 202
 # TASK = """
 # Find the most recent sports analysis article on BBC News related to the English Premier League and summarize its key insights. on https://www.bbc.com/news/
 # """
+TASK = """
+Go to bbc.com and give me the latest top post (1).
+"""
 
 
 async def main():
