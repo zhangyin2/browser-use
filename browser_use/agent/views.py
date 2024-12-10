@@ -264,3 +264,8 @@ class AgentError:
 		if include_trace:
 			return f'{str(error)}\nStacktrace:\n{traceback.format_exc()}'
 		return f'{str(error)}'
+
+
+class ValidationResult(BaseModel):
+	is_valid: bool
+	reason: str

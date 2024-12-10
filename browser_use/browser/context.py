@@ -1,7 +1,3 @@
-"""
-Playwright browser on steroids.
-"""
-
 import asyncio
 import base64
 import json
@@ -48,15 +44,15 @@ class BrowserContextConfig:
 		cookies_file: None
 			Path to cookies file for persistence
 
-	        disable_security: False
-	                Disable browser security features
+			disable_security: False
+					Disable browser security features
 
 		minimum_wait_page_load_time: 0.5
 			Minimum time to wait before getting page state for LLM input
 
-	        wait_for_network_idle_page_load_time: 1.0
-	                Time to wait for network requests to finish before getting page state.
-	                Lower values may result in incomplete page loads.
+			wait_for_network_idle_page_load_time: 1.0
+					Time to wait for network requests to finish before getting page state.
+					Lower values may result in incomplete page loads.
 
 		maximum_wait_page_load_time: 5.0
 			Maximum time to wait for page load before proceeding anyway
@@ -165,6 +161,24 @@ class BrowserContext:
 			except Exception as e:
 				logger.warning(f'Failed to force close browser context: {e}')
 
+	def _get_initial_state(self) -> BrowserState:
+		"""Get the initial state of the browser"""
+		return BrowserState(
+			element_tree=DOMElementNode(
+				tag_name='root',
+				is_visible=True,
+				parent=None,
+				xpath='',
+				attributes={},
+				children=[],
+			),
+			selector_map={},
+			url='',
+			title='',
+			screenshot=None,
+			tabs=[],
+		)
+
 	async def _initialize_session(self):
 		"""Initialize the browser session"""
 		logger.debug('Initializing browser context')
@@ -175,31 +189,30 @@ class BrowserContext:
 		page = await context.new_page()
 
 		# Instead of calling _update_state(), create an empty initial state
-		initial_state = BrowserState(
-			element_tree=DOMElementNode(
-				tag_name='root',
-				is_visible=True,
-				parent=None,
-				xpath='',
-				attributes={},
-				children=[],
-			),
-			selector_map={},
-			url=page.url,
-			title=await page.title(),
-			screenshot=None,
-			tabs=[],
-		)
 
 		self.session = BrowserSession(
 			context=context,
 			current_page=page,
-			cached_state=initial_state,
+			cached_state=self._get_initial_state(),
 		)
 
 		await self._add_new_page_listener(context)
 
 		return self.session
+
+	async def reset_state(self):
+		"""Reset the browser session
+		Call this when you don't want to kill the context but just kill the state
+		"""
+		# close all tabs and clear cached state
+		session = await self.get_session()
+
+		pages = session.context.pages
+		for page in pages:
+			await page.close()
+
+		session.cached_state = self._get_initial_state()
+		session.current_page = await session.context.new_page()
 
 	async def _add_new_page_listener(self, context: PlaywrightBrowserContext):
 		async def on_page(page: Page):
@@ -620,22 +633,22 @@ class BrowserContext:
 			page = await self.get_current_page()
 			await page.evaluate(
 				"""
-                try {
-                    // Remove the highlight container and all its contents
-                    const container = document.getElementById('playwright-highlight-container');
-                    if (container) {
-                        container.remove();
-                    }
+				try {
+					// Remove the highlight container and all its contents
+					const container = document.getElementById('playwright-highlight-container');
+					if (container) {
+						container.remove();
+					}
 
-                    // Remove highlight attributes from elements
-                    const highlightedElements = document.querySelectorAll('[browser-user-highlight-id^="playwright-highlight-"]');
-                    highlightedElements.forEach(el => {
-                        el.removeAttribute('browser-user-highlight-id');
-                    });
-                } catch (e) {
-                    console.error('Failed to remove highlights:', e);
-                }
-                """
+					// Remove highlight attributes from elements
+					const highlightedElements = document.querySelectorAll('[browser-user-highlight-id^="playwright-highlight-"]');
+					highlightedElements.forEach(el => {
+						el.removeAttribute('browser-user-highlight-id');
+					});
+				} catch (e) {
+					console.error('Failed to remove highlights:', e);
+				}
+				"""
 			)
 		except Exception as e:
 			logger.debug(f'Failed to remove highlights (this is usually ok): {str(e)}')
@@ -697,10 +710,10 @@ class BrowserContext:
 		Creates a CSS selector for a DOM element, handling various edge cases and special characters.
 
 		Args:
-		        element: The DOM element to create a selector for
+				element: The DOM element to create a selector for
 
 		Returns:
-		        A valid CSS selector string
+				A valid CSS selector string
 		"""
 		try:
 			# Get base selector from XPath

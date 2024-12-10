@@ -13,13 +13,12 @@ from dotenv import load_dotenv
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
 	BaseMessage,
-	SystemMessage,
 )
 from openai import RateLimitError
 from pydantic import BaseModel, ValidationError
 
 from browser_use.agent.message_manager.service import MessageManager
-from browser_use.agent.prompts import AgentMessagePrompt, SystemPrompt
+from browser_use.agent.prompts import AgentMessagePrompt, SystemPrompt, ValidateOutputPrompt
 from browser_use.agent.views import (
 	ActionResult,
 	AgentError,
@@ -27,6 +26,7 @@ from browser_use.agent.views import (
 	AgentHistoryList,
 	AgentOutput,
 	AgentStepInfo,
+	ValidationResult,
 )
 from browser_use.browser.browser import Browser
 from browser_use.browser.context import BrowserContext
@@ -135,6 +135,7 @@ class Agent:
 		)
 
 		# Tracking variables
+		self.run_retries = 0
 		self.history: AgentHistoryList = AgentHistoryList(history=[])
 		self.n_steps = 1
 		self.consecutive_failures = 0
@@ -375,33 +376,21 @@ class Agent:
 
 	async def _validate_output(self) -> bool:
 		"""Validate the output of the last action is what the user wanted"""
-		system_msg = (
-			f'You are a validator of an agent who interacts with a browser. '
-			f'Validate if the output of last action is what the user wanted and if the task is completed. '
-			f'If the task is unclear defined, you can let it pass. But if something is missing or the image does not show what was requested dont let it pass. '
-			f'Try to understand the page and help the model with suggestions like scroll, do x, ... to get the solution right. '
-			f'Task to validate: {self.task}. Return a JSON object with 2 keys: is_valid and reason. '
-			f'is_valid is a boolean that indicates if the output is correct. '
-			f'reason is a string that explains why it is valid or not.'
-			f' example: {{"is_valid": false, "reason": "The user wanted to search for "cat photos", but the agent searched for "dog photos" instead."}}'
-		)
-
 		if self.browser_context.session:
 			state = await self.browser_context.get_state(use_vision=self.use_vision)
+
+			system_msg = ValidateOutputPrompt(self.task).get_system_message()
 			content = AgentMessagePrompt(
 				state=state,
 				result=self._last_result,
 				include_attributes=self.include_attributes,
 				max_error_length=self.max_error_length,
-			)
-			msg = [SystemMessage(content=system_msg), content.get_user_message()]
+			).get_user_message()
+
+			msg = [system_msg, content]
 		else:
 			# if no browser session, we can't validate the output
 			return True
-
-		class ValidationResult(BaseModel):
-			is_valid: bool
-			reason: str
 
 		validator = self.llm.with_structured_output(ValidationResult, include_raw=True)
 		response: dict[str, Any] = await validator.ainvoke(msg)  # type: ignore

@@ -202,3 +202,22 @@ Interactive elements:
 			)
 
 		return HumanMessage(content=state_description)
+
+
+class ValidateOutputPrompt:
+	def __init__(self, task: str):
+		self.task = task
+
+	def get_system_message(self) -> SystemMessage:
+		system_msg = (
+			f'You are a validator of an agent who interacts with a browser. '
+			f'Validate if the output of last action is what the user wanted and if the task is completed. '
+			f'If the task is unclear defined, you can let it pass. But if something is missing or the image does not show what was requested dont let it pass. '
+			f'Try to understand the page and help the model with suggestions like scroll, do x, ... to get the solution right. '
+			f'Task to validate: {self.task}. Return a JSON object with 2 keys: is_valid and reason. '
+			f'is_valid is a boolean that indicates if the output is correct. '
+			f'reason is a string that explains why it is valid or not.'
+			f' example: {{"is_valid": false, "reason": "The user wanted to search for "cat photos", but the agent searched for "dog photos" instead."}}'
+		)
+
+		return SystemMessage(content=system_msg)
