@@ -46,7 +46,7 @@ class SystemPrompt:
        {"click_element": {"index": 3}}
      ]
    - Navigation and extraction: [
-       {"open_new_tab": {}},
+       {"open_tab": {}},
        {"go_to_url": {"url": "https://example.com"}},
        {"extract_page_content": {}}
      ]
