@@ -33,10 +33,26 @@ class ControllerRegisteredFunctionsTelemetryEvent(BaseTelemetryEvent):
 class AgentStepTelemetryEvent(BaseTelemetryEvent):
 	agent_id: str
 	step: int
-	step_error: list[str]
 	consecutive_failures: int
 	actions: list[dict]
+	version: str
+	source: str
+	model_name: str
+	chat_model_library: str
+	step_error: Optional[list[str]] = None
 	name: str = 'agent_step'
+
+
+@dataclass
+class AgentTaskTelemetryEvent(BaseTelemetryEvent):
+	agent_id: str
+	task: str
+	task_plan: str
+	value: int
+	difficulty: int
+	tags: list[str]
+	summary: str
+	name: str = 'agent_task'
 
 
 @dataclass

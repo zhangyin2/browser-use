@@ -50,6 +50,7 @@ from browser_use.telemetry.views import (
 	AgentEndTelemetryEvent,
 	AgentRunTelemetryEvent,
 	AgentStepTelemetryEvent,
+	AgentTaskTelemetryEvent,
 )
 from browser_use.utils import time_execution_async
 
@@ -166,6 +167,7 @@ class Agent:
 
 		if save_conversation_path:
 			logger.info(f'Saving conversation to {save_conversation_path}')
+		self._set_metadata()
 
 	def _setup_action_models(self) -> None:
 		"""Setup dynamic action models from controller's registry"""
@@ -216,6 +218,7 @@ class Agent:
 				if model_output
 				else []
 			)
+
 			self.telemetry.capture(
 				AgentStepTelemetryEvent(
 					agent_id=self.agent_id,
@@ -223,6 +226,10 @@ class Agent:
 					actions=actions,
 					consecutive_failures=self.consecutive_failures,
 					step_error=[r.error for r in result if r.error] if result else ['No result'],
+					version=self.version,
+					source=self.source,
+					model_name=self.model_name,
+					chat_model_library=self.chat_model_library,
 				)
 			)
 			if not result:
@@ -361,9 +368,7 @@ class Agent:
 		f.write(' RESPONSE\n')
 		f.write(json.dumps(json.loads(response.model_dump_json(exclude_unset=True)), indent=2))
 
-	def _log_agent_run(self) -> None:
-		"""Log the agent run"""
-		logger.info(f'🚀 Starting task: {self.task}')
+	def _set_metadata(self) -> None:
 		# model_name is eiter model or model_name
 		if hasattr(self.llm, 'model_name'):
 			model_name = self.llm.model_name  # type: ignore
@@ -371,7 +376,7 @@ class Agent:
 			model_name = self.llm.model  # type: ignore
 		else:
 			model_name = 'Unknown'
-
+		chat_model_library = self.llm.__class__.__name__
 		try:
 			import pkg_resources
 
@@ -388,17 +393,29 @@ class Agent:
 			except Exception:
 				version = 'unknown'
 				source = 'unknown'
-		logger.debug(f'Version: {version}, Source: {source}')
+		self.version = version
+		self.source = source
+		self.model_name = model_name
+		self.chat_model_library = chat_model_library
+		logger.debug(f'Version: {self.version}, Source: {self.source}')
+		logger.debug(
+			f'Model name: {self.model_name}, Chat model library: {self.chat_model_library}'
+		)
+
+	def _log_agent_run(self) -> None:
+		"""Log the agent run"""
+		logger.info(f'🚀 Starting task: {self.task}')
+
 		self.telemetry.capture(
 			AgentRunTelemetryEvent(
 				agent_id=self.agent_id,
 				use_vision=self.use_vision,
 				tool_call_in_content=self.tool_call_in_content,
 				task=self.task,
-				model_name=model_name,
-				chat_model_library=self.llm.__class__.__name__,
-				version=version,
-				source=source,
+				model_name=self.model_name,
+				chat_model_library=self.chat_model_library,
+				version=self.version,
+				source=self.source,
 			)
 		)
 
@@ -410,7 +427,20 @@ class Agent:
 			logger.info(f'📝 Summary: {self.task_plan.short_summary}')
 			logger.info(f'🏷️ Tags: {", ".join(self.task_plan.tags)}')
 			logger.info(f'📊 Difficulty: {self.task_plan.estimated_difficulty}/10')
+			logger.info(f'📊 Value: {self.task_plan.estimated_value}/10')
+
 			task = self.task_plan.task
+			self.telemetry.capture(
+				AgentTaskTelemetryEvent(
+					agent_id=self.agent_id,
+					task=self.task,
+					task_plan=task,
+					value=self.task_plan.estimated_value,
+					difficulty=self.task_plan.estimated_difficulty,
+					tags=self.task_plan.tags,
+					summary=self.task_plan.short_summary,
+				)
+			)
 		except Exception as e:
 			logger.warning(f'Failed to plan task: {str(e)}')
 			logger.warning('Continuing with original task')
