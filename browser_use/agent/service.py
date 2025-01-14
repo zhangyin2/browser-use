@@ -90,6 +90,7 @@ class Agent:
 		max_error_length: int = 400,
 		max_actions_per_step: int = 10,
 		tool_call_in_content: bool = True,
+		plan_task: bool = False,
 	):
 		self.agent_id = str(uuid.uuid4())  # unique identifier for the agent
 
@@ -135,6 +136,14 @@ class Agent:
 		self.max_input_tokens = max_input_tokens
 		self.tool_call_in_content = tool_call_in_content
 
+		# Planning manager setup
+		self.planning_manager = PlanningManager(llm=self.llm, outputModel=self.AgentOutput)
+		self.plan_task = plan_task
+
+		# Add planning step
+		if self.plan_task:
+			self.task = self._plan_task()
+
 		self.message_manager = MessageManager(
 			llm=self.llm,
 			task=self.task,
@@ -157,9 +166,6 @@ class Agent:
 
 		if save_conversation_path:
 			logger.info(f'Saving conversation to {save_conversation_path}')
-
-		self.planning_manager = PlanningManager(llm=self.llm)
-		self.task_plan: Optional[TaskPlan] = None
 
 	def _setup_action_models(self) -> None:
 		"""Setup dynamic action models from controller's registry"""
@@ -396,32 +402,26 @@ class Agent:
 			)
 		)
 
-	async def _plan_task(self) -> None:
+	def _plan_task(self) -> str:
 		"""Plan the task using PlanningManager"""
 		try:
-			self.task_plan = await self.planning_manager.plan_task(self.task)
-			logger.info("📋 Task Plan:")
-			logger.info(f"🎯 Reformulated task: {self.task_plan.task}")
-			logger.info(f"📝 Summary: {self.task_plan.short_summary}")
-			logger.info(f"🏷️ Tags: {', '.join(self.task_plan.tags)}")
-			logger.info(f"📊 Difficulty: {self.task_plan.estimated_difficulty}/10")
+			self.task_plan = self.planning_manager.plan_task(self.task)
+			logger.info(f'🎯 Reformulated task: \n{self.task_plan.task}')
+			logger.info(f'📝 Summary: {self.task_plan.short_summary}')
+			logger.info(f'🏷️ Tags: {", ".join(self.task_plan.tags)}')
+			logger.info(f'📊 Difficulty: {self.task_plan.estimated_difficulty}/10')
+			task = self.task_plan.task
 		except Exception as e:
-			logger.warning(f"Failed to plan task: {str(e)}")
-			logger.warning("Continuing with original task")
+			logger.warning(f'Failed to plan task: {str(e)}')
+			logger.warning('Continuing with original task')
+			self.task_plan = None
+			task = self.task
+		return task
 
 	async def run(self, max_steps: int = 100) -> AgentHistoryList:
 		"""Execute the task with maximum number of steps"""
 		try:
 			self._log_agent_run()
-			
-			# Add planning step
-			await self._plan_task()
-			
-			# If planning was successful, use the reformulated task
-			if self.task_plan:
-				self.task = self.task_plan.task
-				# Update message manager with reformulated task
-				self.message_manager.task = self.task_plan.task
 
 			for step in range(max_steps):
 				if self._too_many_failures():

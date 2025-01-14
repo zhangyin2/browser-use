@@ -1,6 +1,6 @@
 import asyncio
-import logging
 import json
+import logging
 
 from main_content_extractor import MainContentExtractor
 from playwright.async_api import Page
@@ -161,8 +161,9 @@ class Controller:
 		async def extract_content(params: ExtractPageContentAction, browser: BrowserContext):
 			page = await browser.get_current_page()
 			output_format = 'markdown' if params.include_links else 'text'
+			html = await page.content()
 			content = MainContentExtractor.extract(  # type: ignore
-				html=await page.content(),
+				html=html,
 				output_format=output_format,
 			)
 			msg = f'📄  Extracted page as {output_format}\n: {content}\n'
@@ -309,10 +310,8 @@ class Controller:
 							formatted_options = []
 							for opt in options['options']:
 								# encoding ensures AI uses the exact string in select_dropdown_option
-								encoded_text = json.dumps(opt["text"])
-								formatted_options.append(
-									f"{opt['index']}: text={encoded_text}"
-								)
+								encoded_text = json.dumps(opt['text'])
+								formatted_options.append(f'{opt["index"]}: text={encoded_text}')
 
 							all_options.extend(formatted_options)
 
@@ -448,9 +447,7 @@ class Controller:
 							logger.debug(f'Selection result: {result}')
 
 							if result.get('success'):
-								msg = (
-									f"Selected option {json.dumps(text)} (value={result.get('selectedValue')}"
-								)
+								msg = f'Selected option {json.dumps(text)} (value={result.get("selectedValue")}'
 								logger.info(msg + f' in frame {frame_index}')
 								return ActionResult(extracted_content=msg, include_in_memory=True)
 							else:
