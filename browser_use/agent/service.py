@@ -173,16 +173,16 @@ class Agent:
 
 		try:
 			state = await self.browser_context.get_state(use_vision=self.use_vision)
-			self.message_manager.add_state_message(state, self._last_result, step_info)
-			input_messages = self.message_manager.get_messages()
+
+			input_messages = self.message_manager.get_messages(
+				state, self._last_result, step_info=step_info
+			)
 			try:
 				model_output = await self.get_next_action(input_messages)
 				self._save_conversation(input_messages, model_output)
-				self.message_manager._remove_last_state_message()  # we dont want the whole state in the chat history
-				self.message_manager.add_model_output(model_output)
+				self.message_manager.set_last_output(model_output)
 			except Exception as e:
 				# model call failed, remove last state message from history
-				self.message_manager._remove_last_state_message()
 				raise e
 
 			result: list[ActionResult] = await self.controller.multi_act(
@@ -283,7 +283,9 @@ class Agent:
 	async def get_next_action(self, input_messages: list[BaseMessage]) -> AgentOutput:
 		"""Get next action from LLM based on current state"""
 
-		structured_llm = self.llm.with_structured_output(self.AgentOutput, include_raw=True)
+		structured_llm = self.llm.with_structured_output(
+			self.AgentOutput, include_raw=True, method='function_calling'
+		)
 		response: dict[str, Any] = await structured_llm.ainvoke(input_messages)  # type: ignore
 
 		parsed: AgentOutput = response['parsed']
@@ -294,7 +296,6 @@ class Agent:
 		parsed.action = parsed.action[: self.max_actions_per_step]
 		self._log_response(parsed)
 		self.n_steps += 1
-
 		return parsed
 
 	def _log_response(self, response: AgentOutput) -> None:

@@ -115,7 +115,7 @@ Notes:
 - _[:] elements provide context but cannot be interacted with
 """
 
-	def get_system_message(self) -> SystemMessage:
+	def get_system_message(self) -> str:
 		"""
 		Get the system prompt for the agent.
 
@@ -139,7 +139,7 @@ Functions:
 {self.default_action_description}
 
 Remember: Your responses must be valid JSON matching the specified format. Each action in the sequence must be valid."""
-		return SystemMessage(content=AGENT_PROMPT)
+		return AGENT_PROMPT
 
 
 # Example:
@@ -163,7 +163,7 @@ class AgentMessagePrompt:
 		self.include_attributes = include_attributes
 		self.step_info = step_info
 
-	def get_user_message(self) -> HumanMessage:
+	def get_user_message(self) -> str:
 		if self.step_info:
 			step_info_description = (
 				f'Current step: {self.step_info.step_number + 1}/{self.step_info.max_steps}'
@@ -200,16 +200,4 @@ Interactive elements from current page view:
 					error = result.error[-self.max_error_length :]
 					state_description += f'\nAction error {i + 1}/{len(self.result)}: ...{error}'
 
-		if self.state.screenshot:
-			# Format message for vision model
-			return HumanMessage(
-				content=[
-					{'type': 'text', 'text': state_description},
-					{
-						'type': 'image_url',
-						'image_url': {'url': f'data:image/png;base64,{self.state.screenshot}'},
-					},
-				]
-			)
-
-		return HumanMessage(content=state_description)
+		return state_description
