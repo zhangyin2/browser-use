@@ -3,7 +3,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
-from browser_use.agent.message_manager.service import MessageManager
+from browser_use.agent.message_manager.service_init import MessageManager
 from browser_use.agent.prompts import SystemPrompt
 from browser_use.agent.views import ActionResult
 from browser_use.browser.views import BrowserState, TabInfo
@@ -196,7 +196,7 @@ def test_token_overflow_handling_with_real_flow(message_manager: MessageManager,
 			current_state=AgentBrain(
 				evaluation_previous_goal=f'Success in step {i}',
 				memory=f'Memory from step {i}',
-				next_goal=f'Goal for step {i+1}',
+				next_goal=f'Goal for step {i + 1}',
 			),
 			action=[ActionModel()],
 		)
