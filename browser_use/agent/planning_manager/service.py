@@ -48,8 +48,8 @@ After you browser_use will execute your plan he will start with an open browser,
 
 End with the done action there browser_use will provide the answer to the user
 
-
-Keep the reformulated task focused and specific while maintaining all important details from the original task."""
+If the task is already a clear plan, just return it.
+Otherwise, keep the reformulated task focused while maintaining all important details from the original task."""
 		)
 
 	def plan_task(self, raw_task: str) -> TaskPlan:
