@@ -45,32 +45,31 @@ async def test_process_html_file():
 				print(f'Token count: {token_count}')
 				return element_count, token_count
 
-			# Test initial viewport (0px expansion)
-			viewport_count, viewport_tokens = await test_viewport(
-				0, '1. Initial viewport (0px expansion)'
-			)
+			expansions = [0, 100, 200, 300, 400, 500, 600, 1000, -1, -200]
+			results = []
 
-			# Test with small expansion
-			small_count, small_tokens = await test_viewport(100, '2. Small expansion (100px)')
-
-			# Test with medium expansion
-			medium_count, medium_tokens = await test_viewport(200, '3. Medium expansion (200px)')
-
-			# Test all elements
-			all_count, all_tokens = await test_viewport(-1, '4. All elements (-1 expansion)')
+			for i, expansion in enumerate(expansions):
+				description = (
+					f'{i + 1}. Expansion {expansion}px'
+					if expansion >= 0
+					else f'{i + 1}. All elements ({expansion} expansion)'
+				)
+				count, tokens = await test_viewport(expansion, description)
+				results.append((count, tokens))
+				input('Press Enter to continue...')
+				await page.evaluate(
+					'document.getElementById("playwright-highlight-container")?.remove()'
+				)
 
 			# Print comparison summary
 			print('\nComparison Summary:')
-			print(f'Initial viewport (0px):   {viewport_count} elements, {viewport_tokens} tokens')
-			print(
-				f'Small expansion (100px):  {small_count} elements (+{small_count - viewport_count}), {small_tokens} tokens'
-			)
-			print(
-				f'Medium expansion (200px): {medium_count} elements (+{medium_count - viewport_count}), {medium_tokens} tokens'
-			)
-			print(
-				f'All elements (-1):        {all_count} elements (+{all_count - viewport_count}), {all_tokens} tokens'
-			)
+			for i, (count, tokens) in enumerate(results):
+				expansion = expansions[i]
+				description = f'Expansion {expansion}px' if expansion >= 0 else 'All elements (-1)'
+				initial_count, initial_tokens = results[0]
+				print(
+					f'{description}: {count} elements (+{count - initial_count}), {tokens} tokens'
+				)
 
 			input('\nPress Enter to continue to next website...')
 
