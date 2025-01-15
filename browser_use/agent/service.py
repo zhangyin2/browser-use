@@ -140,7 +140,7 @@ class Agent:
 		# Planning manager setup
 		self.planning_manager = PlanningManager(llm=self.llm, outputModel=self.AgentOutput)
 		self.plan_task = plan_task
-
+		self.raw_task = task
 		# Add planning step
 		if self.plan_task:
 			self.task = self._plan_task()
@@ -168,12 +168,15 @@ class Agent:
 			logger.info(f'Saving conversation to {save_conversation_path}')
 		self._set_metadata()
 		self.tool_calling_method = self.set_tool_calling_method(tool_calling_method)
+		logger.debug(f'Tool calling method: {self.tool_calling_method}')
 
 	def set_tool_calling_method(self, tool_calling_method: Optional[str]) -> Optional[str]:
 		if tool_calling_method == 'auto':
 			if self.chat_model_library == 'ChatGoogleGenerativeAI':
 				return None
 			elif self.chat_model_library == 'ChatOpenAI':
+				return 'function_calling'
+			elif self.chat_model_library == 'AzureChatOpenAI':
 				return 'function_calling'
 			else:
 				return None
