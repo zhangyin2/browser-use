@@ -67,7 +67,7 @@ class MessageManager:
 				'args': {
 					'current_state': {
 						'evaluation_previous_goal': 'Unknown - no previous action',
-						'memory': 'Starting the task',
+						'memory': 'Nothing completed yet',
 						'next_goal': 'Open the browser',
 					},
 					'action': [{'go_to_url': 'blank'}],
@@ -97,39 +97,55 @@ class MessageManager:
 		step_info: Optional[AgentStepInfo] = None,
 	) -> list[BaseMessage]:
 		# Format the result and memory state as a string
-		state_message = AgentMessagePrompt(
+		browser_state = AgentMessagePrompt(
 			state,
 			result,
 			include_attributes=self.include_attributes,
 			max_error_length=self.max_error_length,
 			step_info=step_info,
-		).get_user_message()
+		)
 
 		# Get the base messages from the prompt template
 		messages = []
 
-		# Add system message and task message (these are already in the prompt template)
+		# 1. Add system message and task message (these are already in the prompt template)
 		messages.extend(self.prompt)
-		# Add AI message (last output)
+
+		# 2. Add AI message (last output)
 		messages.append(self.last_output)
 
-		# Add tool message with state
-		messages.append(ToolMessage(content=state_message, tool_call_id=str(self.id)))
+		# 3. Add tool message with result of the tool call
+		messages.append(
+			ToolMessage(
+				content=browser_state.get_result_and_error_description(),
+				tool_call_id=str(self.id),
+			)
+		)
 
-		# Add screenshot if using vision
+		# 4. Add human message with screenshot if using vision
+		human_msg = (
+			'This is the current page, give me the next action to reach my ultimate goal: \n'
+			+ browser_state.get_state_description()
+		)
 		if self.use_vision and state.screenshot:
 			messages.append(
 				HumanMessage(
 					content=[
 						{
 							'type': 'text',
-							'text': 'This is the current page, give me the next action to reach my ultimate goal',
+							'text': human_msg,
 						},
 						{
 							'type': 'image_url',
 							'image_url': {'url': f'data:image/png;base64,{state.screenshot}'},
 						},
 					]
+				)
+			)
+		else:  # no vision
+			messages.append(
+				HumanMessage(
+					content=human_msg,
 				)
 			)
 

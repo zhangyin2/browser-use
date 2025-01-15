@@ -24,7 +24,7 @@ class SystemPrompt:
    {
      "current_state": {
        "evaluation_previous_goal": "Success|Failed|Unknown - Analyze the current elements and the image to check if the previous goals/actions are successful like intended by the task. Ignore the action result. The website is the ground truth. Also mention if something unexpected happened like new suggestions in an input field. Shortly state why/why not",
-       "memory": "Description of what has been done and what you need to remember until the end of the task",
+       "memory": "Description of what has been done and what you need to remember to complete the task",
        "next_goal": "What needs to be done with the next actions"
      },
      "action": [
@@ -50,7 +50,6 @@ class SystemPrompt:
        {"go_to_url": {"url": "https://example.com"}},
        {"extract_page_content": {}}
      ]
-
 
 3. ELEMENT INTERACTION:
    - Only use indexes that exist in the provided element list
@@ -88,30 +87,38 @@ class SystemPrompt:
    - Try to be efficient, e.g. fill forms at once, or chain actions where nothing changes on the page like saving, extracting, checkboxes...
    - only use multiple actions if it makes sense. 
 
-
+9. Memory:
+- Your memory your only way to remember things from previous steps, like things you have completed or approaches did did not work.
+- here you also need to store subtasks which you need to complete to reach the ultimate goal.
+- with your memory you can transfer important information to the next step.
 """
 		text += f'   - use maximum {self.max_actions_per_step} actions per sequence'
 		return text
 
 	def input_format(self) -> str:
 		return """
-INPUT STRUCTURE:
-1. Current URL: The webpage you're currently on
-2. Available Tabs: List of open browser tabs
-3. Interactive Elements: List in the format:
-   index[:]<element_type>element_text</element_type>
-   - index: Numeric identifier for interaction
-   - element_type: HTML element type (button, input, etc.)
-   - element_text: Visible text or element description
 
+Your input is always:
+ 1. system message
+ 2. ultimate goal
+ 3. your previous output with eval, memory, next goal and actions
+ 4. the result of the previous action (if any) with action result and errors
+ 5. the current state of the browser:
+    - Current URL: The webpage you're currently on
+    - Available Tabs: List of open browser tabs
+    - Interactive Elements: List in the format:
+      - index[:]<element_type>element_text</element_type>
+      - index: Numeric identifier for interaction
+      - element_type: HTML element type (button, input, etc.)
+      - element_text: Visible text or element description
 Example:
 33[:]<button>Submit Form</button>
 _[:] Non-interactive text
 
-
 Notes:
 - Only elements with numeric indexes are interactive
 - _[:] elements provide context but cannot be interacted with
+
 """
 
 	def get_system_message(self) -> str:
@@ -130,10 +137,10 @@ Notes:
 
 Current date and time: {time_str}
 
-{self.input_format()}
 
 {self.important_rules()}
 
+{self.input_format()}
 
 Your responses must be valid JSON matching the specified format. Each action in the sequence must be valid."""
 		return AGENT_PROMPT
@@ -160,7 +167,7 @@ class AgentMessagePrompt:
 		self.include_attributes = include_attributes
 		self.step_info = step_info
 
-	def get_user_message(self) -> str:
+	def get_state_description(self) -> str:
 		if self.step_info:
 			step_info_description = (
 				f'Current step: {self.step_info.step_number + 1}/{self.step_info.max_steps}'
@@ -184,17 +191,23 @@ Available tabs:
 {self.state.tabs}
 Interactive elements from current page view:
 {elements_text}
-"""
+		"""
+		return state_description
 
+	def get_result_and_error_description(self) -> str:
+		result_and_error = ''
 		if self.result:
 			for i, result in enumerate(self.result):
 				if result.extracted_content:
-					state_description += (
+					result_and_error += (
 						f'\nAction result {i + 1}/{len(self.result)}: {result.extracted_content}'
 					)
 				if result.error:
-					# only use last 300 characters of error
+					# only use last x characters of error for the model
 					error = result.error[-self.max_error_length :]
-					state_description += f'\nAction error {i + 1}/{len(self.result)}: ...{error}'
+					result_and_error += f'\nAction error {i + 1}/{len(self.result)}: ...{error}'
 
-		return state_description
+		return result_and_error
+
+	def get_user_message(self) -> str:
+		return self.get_state_description() + self.get_result_and_error_description()
