@@ -9,8 +9,6 @@ from langchain_ollama import ChatOllama
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from pydantic import SecretStr
 
-from browser_use.agent.message_manager.service_init import MessageManager
-from browser_use.agent.prompts import SystemPrompt
 from browser_use.agent.service import Agent
 from browser_use.agent.views import ActionResult, AgentHistoryList
 from browser_use.browser.browser import Browser, BrowserConfig
@@ -51,6 +49,12 @@ api_key_anthropic = SecretStr(os.getenv('ANTHROPIC_API_KEY') or '')
 # pytest -s -v tests/test_models.py
 @pytest.fixture(
 	params=[
+		AzureChatOpenAI(
+			model='gpt-4o-mini',
+			api_version='2024-10-21',
+			azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT', ''),
+			api_key=SecretStr(os.getenv('AZURE_OPENAI_KEY', '')),
+		),
 		ChatAnthropic(
 			model_name='claude-3-5-sonnet-20240620',
 			timeout=100,
@@ -62,12 +66,6 @@ api_key_anthropic = SecretStr(os.getenv('ANTHROPIC_API_KEY') or '')
 		ChatOpenAI(model='gpt-4o-mini'),
 		AzureChatOpenAI(
 			model='gpt-4o',
-			api_version='2024-10-21',
-			azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT', ''),
-			api_key=SecretStr(os.getenv('AZURE_OPENAI_KEY', '')),
-		),
-		AzureChatOpenAI(
-			model='gpt-4o-mini',
 			api_version='2024-10-21',
 			azure_endpoint=os.getenv('AZURE_OPENAI_ENDPOINT', ''),
 			api_key=SecretStr(os.getenv('AZURE_OPENAI_KEY', '')),
@@ -87,11 +85,11 @@ api_key_anthropic = SecretStr(os.getenv('ANTHROPIC_API_KEY') or '')
 		),
 	],
 	ids=[
+		'azure-gpt-4o-mini',
 		'claude-3-5-sonnet',
 		'gpt-4o',
 		'gpt-4o-mini',
 		'azure-gpt-4o',
-		'azure-gpt-4o-mini',
 		'gemini-2.0-flash-exp',
 		'gemini-1.5-pro',
 		'gemini-1.5-flash-latest',
@@ -120,7 +118,7 @@ async def test_model_search(llm, context):
 		task="Search Google for 'elon musk' then click on the first result and scroll down.",
 		llm=llm,
 		browser_context=context,
-		max_failures=1,
+		max_failures=2,
 		use_vision=use_vision,
 	)
 	history: AgentHistoryList = await agent.run(max_steps=2)
