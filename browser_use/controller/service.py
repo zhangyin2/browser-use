@@ -172,7 +172,12 @@ class Controller:
 
 		@self.registry.action('Complete task', param_model=DoneAction)
 		async def done(params: DoneAction):
-			return ActionResult(is_done=True, extracted_content=params.text)
+			return ActionResult(
+				is_done=True,
+				extracted_content=params.text,
+				status=params.status,
+				status_reason=params.status_reason,
+			)
 
 		@self.registry.action(
 			'Scroll down the page by pixel amount - if no amount is specified, scroll down one page',

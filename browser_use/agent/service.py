@@ -465,8 +465,19 @@ class Agent:
 					):  # if last step, we dont need to validate
 						if not await self._validate_output():
 							continue
+					status = self.history.status()
+					status_reason = self.history.status_reason()
+					if status == 'success':
+						logger.info('✅ Task completed successfully')
 
-					logger.info('✅ Task completed successfully')
+					elif status == 'failure':
+						logger.info(f'❌ Task failed')
+
+					else:
+						logger.info('😕 Task unknown state')
+
+					logger.info(f'Status reason: {status_reason}')
+
 					break
 			else:
 				logger.info('❌ Failed to complete task in maximum steps')
@@ -479,7 +490,7 @@ class Agent:
 					agent_id=self.agent_id,
 					success=self.history.is_done(),
 					status=self.history.status(),
-					failure_reason=self.history.failure_reason(),
+					status_reason=self.history.status_reason(),
 					steps=self.n_steps,
 					max_steps_reached=self.n_steps >= max_steps,
 					errors=self.history.errors(),

@@ -32,7 +32,7 @@ class ActionResult(BaseModel):
 	extracted_content: Optional[str] = None
 	error: Optional[str] = None
 	include_in_memory: bool = False  # whether to include in past messages as context or not
-	failure_reason: Optional[str] = None
+	status_reason: Optional[str] = None
 	status: Literal['success', 'failure', 'unknown'] = 'unknown'
 
 
@@ -193,10 +193,10 @@ class AgentHistoryList(BaseModel):
 			return self.history[-1].result[-1].status
 		return 'unknown'
 
-	def failure_reason(self) -> Optional[str]:
+	def status_reason(self) -> Optional[str]:
 		"""Get the failure reason of the agent"""
 		if self.history and len(self.history[-1].result) > 0:
-			return self.history[-1].result[-1].failure_reason
+			return self.history[-1].result[-1].status_reason
 		return None
 
 	def has_errors(self) -> bool:

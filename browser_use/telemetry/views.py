@@ -76,5 +76,5 @@ class AgentEndTelemetryEvent(BaseTelemetryEvent):
 	success: bool
 	errors: list[str]
 	status: Literal['success', 'failure', 'unknown']
-	failure_reason: Optional[str] = None
+	status_reason: Optional[str] = None
 	name: str = 'agent_end'
