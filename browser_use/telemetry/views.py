@@ -48,7 +48,6 @@ class AgentTaskTelemetryEvent(BaseTelemetryEvent):
 	agent_id: str
 	task: str
 	task_plan: str
-	value: int
 	difficulty: int
 	tags: list[str]
 	summary: str

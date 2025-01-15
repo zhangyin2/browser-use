@@ -442,7 +442,6 @@ class Agent:
 			logger.info(f'📝 Summary: {self.task_plan.short_summary}')
 			logger.info(f'🏷️ Tags: {", ".join(self.task_plan.tags)}')
 			logger.info(f'📊 Difficulty: {self.task_plan.estimated_difficulty}/10')
-			logger.info(f'📊 Value: {self.task_plan.estimated_value}/10')
 
 			task = self.task_plan.task
 			self.telemetry.capture(
@@ -450,7 +449,6 @@ class Agent:
 					agent_id=self.agent_id,
 					task=self.task,
 					task_plan=task,
-					value=self.task_plan.estimated_value,
 					difficulty=self.task_plan.estimated_difficulty,
 					tags=self.task_plan.tags,
 					summary=self.task_plan.short_summary,

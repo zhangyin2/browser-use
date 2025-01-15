@@ -14,7 +14,3 @@ class TaskPlan(BaseModel):
 		...,
 		description='Estimate of complexity level (1-10)',
 	)
-	estimated_value: int = Field(
-		...,
-		description='Estimate of the value of the task (1-10)',
-	)
