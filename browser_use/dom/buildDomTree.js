@@ -1,7 +1,7 @@
-(
-    doHighlightElements = true
-) => {
+(doHighlightElements, viewportExpansion) => {
     let highlightIndex = 0; // Reset highlight index
+    console.log('doHighlightElements', doHighlightElements);
+    console.log('viewportExpansion', viewportExpansion);
 
     function highlightElement(element, index, parentIframe = null) {
         // Create or get highlight container

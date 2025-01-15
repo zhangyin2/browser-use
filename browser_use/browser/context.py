@@ -672,7 +672,7 @@ class BrowserContext:
 						# Handle numeric indices
 						if idx.isdigit():
 							index = int(idx) - 1
-							base_part += f':nth-of-type({index+1})'
+							base_part += f':nth-of-type({index + 1})'
 						# Handle last() function
 						elif idx == 'last()':
 							base_part += ':last-of-type'
