@@ -77,6 +77,12 @@ class BrowserContextConfig:
 
 		trace_path: None
 			Path to save trace files. It will auto name the file with the TRACE_PATH/{context_id}.zip
+
+		highlight_elements: True
+			Highlight elements in the DOM on the screen
+
+		viewport_expansion: 800
+			Viewport expansion in pixels. This amount will increase the number of elements which are included in the state what the LLM will see. If set to -1, all elements will be included (this leads to high token usage). If set to 0, only the elements which are visible in the viewport will be included.
 	"""
 
 	cookies_file: str | None = None
@@ -94,6 +100,9 @@ class BrowserContextConfig:
 
 	save_recording_path: str | None = None
 	trace_path: str | None = None
+
+	highlight_elements: bool = True
+	viewport_expansion: int = 800
 
 
 @dataclass
@@ -567,7 +576,10 @@ class BrowserContext:
 		try:
 			await self.remove_highlights()
 			dom_service = DomService(page)
-			content = await dom_service.get_clickable_elements()
+			content = await dom_service.get_clickable_elements(
+				highlight_elements=self.config.highlight_elements,
+				viewport_expansion=self.config.viewport_expansion,
+			)
 
 			screenshot_b64 = None
 			if use_vision:
