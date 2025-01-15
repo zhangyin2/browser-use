@@ -90,7 +90,6 @@ class Agent:
 		],
 		max_error_length: int = 400,
 		max_actions_per_step: int = 10,
-		tool_call_in_content: bool = True,
 		plan_task: bool = False,
 	):
 		self.agent_id = str(uuid.uuid4())  # unique identifier for the agent
@@ -135,7 +134,6 @@ class Agent:
 		self._setup_action_models()
 
 		self.max_input_tokens = max_input_tokens
-		self.tool_call_in_content = tool_call_in_content
 
 		# Planning manager setup
 		self.planning_manager = PlanningManager(llm=self.llm, outputModel=self.AgentOutput)
@@ -154,7 +152,6 @@ class Agent:
 			include_attributes=self.include_attributes,
 			max_error_length=self.max_error_length,
 			max_actions_per_step=self.max_actions_per_step,
-			tool_call_in_content=tool_call_in_content,
 		)
 
 		# Tracking variables
@@ -410,7 +407,6 @@ class Agent:
 			AgentRunTelemetryEvent(
 				agent_id=self.agent_id,
 				use_vision=self.use_vision,
-				tool_call_in_content=self.tool_call_in_content,
 				task=self.task,
 				model_name=self.model_name,
 				chat_model_library=self.chat_model_library,
@@ -480,7 +476,7 @@ class Agent:
 
 					break
 			else:
-				logger.info('❌ Failed to complete task in maximum steps')
+				logger.info('❌ Maximum steps reached')
 
 			return self.history
 

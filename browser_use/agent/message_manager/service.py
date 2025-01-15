@@ -38,7 +38,6 @@ class MessageManager:
 		include_attributes: list[str] = [],
 		max_error_length: int = 400,
 		max_actions_per_step: int = 10,
-		tool_call_in_content: bool = True,
 		use_vision: bool = True,
 	):
 		self.llm = llm
