@@ -4,7 +4,7 @@ import json
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Type
+from typing import Any, Dict, Literal, Optional, Type
 
 from openai import RateLimitError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
@@ -32,6 +32,8 @@ class ActionResult(BaseModel):
 	extracted_content: Optional[str] = None
 	error: Optional[str] = None
 	include_in_memory: bool = False  # whether to include in past messages as context or not
+	failure_reason: Optional[str] = None
+	status: Literal['success', 'failure', 'unknown'] = 'unknown'
 
 
 class AgentBrain(BaseModel):
@@ -184,6 +186,18 @@ class AgentHistoryList(BaseModel):
 		):
 			return self.history[-1].result[-1].is_done
 		return False
+
+	def status(self) -> Literal['success', 'failure', 'unknown']:
+		"""Get the status of the agent"""
+		if self.history and len(self.history[-1].result) > 0:
+			return self.history[-1].result[-1].status
+		return 'unknown'
+
+	def failure_reason(self) -> Optional[str]:
+		"""Get the failure reason of the agent"""
+		if self.history and len(self.history[-1].result) > 0:
+			return self.history[-1].result[-1].failure_reason
+		return None
 
 	def has_errors(self) -> bool:
 		"""Check if the agent has any errors"""

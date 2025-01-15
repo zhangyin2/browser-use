@@ -478,6 +478,8 @@ class Agent:
 				AgentEndTelemetryEvent(
 					agent_id=self.agent_id,
 					success=self.history.is_done(),
+					status=self.history.status(),
+					failure_reason=self.history.failure_reason(),
 					steps=self.n_steps,
 					max_steps_reached=self.n_steps >= max_steps,
 					errors=self.history.errors(),

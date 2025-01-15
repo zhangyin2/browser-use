@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from browser_use.controller.registry.views import ActionModel
 
@@ -75,4 +75,6 @@ class AgentEndTelemetryEvent(BaseTelemetryEvent):
 	max_steps_reached: bool
 	success: bool
 	errors: list[str]
+	status: Literal['success', 'failure', 'unknown']
+	failure_reason: Optional[str] = None
 	name: str = 'agent_end'

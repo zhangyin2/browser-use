@@ -25,6 +25,8 @@ class InputTextAction(BaseModel):
 
 class DoneAction(BaseModel):
 	text: str
+	failure_reason: str
+	status: Literal['success', 'failure', 'unknown']
 
 
 class SwitchTabAction(BaseModel):
