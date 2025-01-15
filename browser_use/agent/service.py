@@ -23,6 +23,7 @@ from langchain_core.messages import (
 from openai import RateLimitError
 from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel, ValidationError
+from regex import D
 
 from browser_use.agent.message_manager.service import MessageManager
 from browser_use.agent.planning_manager.service import PlanningManager
@@ -91,6 +92,7 @@ class Agent:
 		max_error_length: int = 400,
 		max_actions_per_step: int = 10,
 		plan_task: bool = False,
+		tool_calling_method: Optional[str] = 'auto',
 	):
 		self.agent_id = str(uuid.uuid4())  # unique identifier for the agent
 
@@ -165,6 +167,17 @@ class Agent:
 		if save_conversation_path:
 			logger.info(f'Saving conversation to {save_conversation_path}')
 		self._set_metadata()
+		self.tool_calling_method = self.set_tool_calling_method(tool_calling_method)
+
+	def set_tool_calling_method(self, tool_calling_method: Optional[str]) -> Optional[str]:
+		if tool_calling_method == 'auto':
+			if self.chat_model_library == 'ChatGoogleGenerativeAI':
+				return None
+			elif self.chat_model_library == 'ChatOpenAI':
+				return 'function_calling'
+			else:
+				return None
+		return tool_calling_method
 
 	def _setup_action_models(self) -> None:
 		"""Setup dynamic action models from controller's registry"""
@@ -297,10 +310,13 @@ class Agent:
 	@time_execution_async('--get_next_action')
 	async def get_next_action(self, input_messages: list[BaseMessage]) -> AgentOutput:
 		"""Get next action from LLM based on current state"""
+		if self.tool_calling_method is not None:
+			structured_llm = self.llm.with_structured_output(
+				self.AgentOutput, include_raw=True, method=self.tool_calling_method
+			)
+		else:
+			structured_llm = self.llm.with_structured_output(self.AgentOutput, include_raw=True)
 
-		structured_llm = self.llm.with_structured_output(
-			self.AgentOutput, include_raw=True, method='function_calling'
-		)
 		response: dict[str, Any] = await structured_llm.ainvoke(input_messages)  # type: ignore
 
 		parsed: AgentOutput = response['parsed']
