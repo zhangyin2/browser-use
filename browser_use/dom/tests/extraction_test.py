@@ -1,43 +1,84 @@
+import asyncio
 import time
 
 from tokencost import count_string_tokens
 
 from browser_use.browser.browser import Browser, BrowserConfig
-
-# from browser_use.browser.service import Browser
 from browser_use.dom.service import DomService
 from browser_use.utils import time_execution_sync
 
 
-# @pytest.mark.skip("slow af")
 async def test_process_html_file():
 	browser = Browser(config=BrowserConfig(headless=False))
 
+	websites = [
+		'https://kayak.com/flights',
+		'https://immobilienscout24.de',
+		'https://google.com',
+		'https://amazon.com',
+		'https://github.com',
+	]
+
 	async with await browser.new_context() as context:
 		page = await context.get_current_page()
-
 		dom_service = DomService(page)
 
-		# await page.goto('https://kayak.com/flights')
-		# browser.go_to_url('https://google.com/flights')
-		await page.goto('https://immobilienscout24.de')
+		for website in websites:
+			print(f'\n{"=" * 50}\nTesting {website}\n{"=" * 50}')
+			await page.goto(website)
+			time.sleep(2)  # Additional wait for dynamic content
 
-		time.sleep(3)
-		# browser._click_element_by_xpath(
-		# 	'/html/body/div[5]/div/div[2]/div/div/div[3]/div/div[1]/button[1]'
-		# )
-		# browser._click_element_by_xpath("//button[div/div[text()='Alle akzeptieren']]")
+			async def test_viewport(expansion: int, description: str):
+				print(f'\n{description}:')
+				dom_state = await time_execution_sync(f'get_clickable_elements ({description})')(
+					dom_service.get_clickable_elements
+				)(highlight_elements=True, viewport_expansion=expansion)
 
-		dom_state = await time_execution_sync('get_clickable_elements')(
-			dom_service.get_clickable_elements
-		)()
-		elements = dom_state.element_tree
-		selector_map = dom_state.selector_map
+				elements = dom_state.element_tree
+				selector_map = dom_state.selector_map
+				element_count = len(selector_map.keys())
+				token_count = count_string_tokens(
+					elements.clickable_elements_to_string(), model='gpt-4o'
+				)
 
-		print(elements.clickable_elements_to_string())
-		print(
-			'Tokens:', count_string_tokens(elements.clickable_elements_to_string(), model='gpt-4o')
-		)
-		print(len(selector_map.keys()), 'elements highlighted')
+				print(f'Number of elements: {element_count}')
+				print(f'Token count: {token_count}')
+				return element_count, token_count
 
-		input('Press Enter to continue...')
+			# Test initial viewport (0px expansion)
+			viewport_count, viewport_tokens = await test_viewport(
+				0, '1. Initial viewport (0px expansion)'
+			)
+
+			# Test with small expansion
+			small_count, small_tokens = await test_viewport(100, '2. Small expansion (100px)')
+
+			# Test with medium expansion
+			medium_count, medium_tokens = await test_viewport(200, '3. Medium expansion (200px)')
+
+			# Test all elements
+			all_count, all_tokens = await test_viewport(-1, '4. All elements (-1 expansion)')
+
+			# Print comparison summary
+			print('\nComparison Summary:')
+			print(f'Initial viewport (0px):   {viewport_count} elements, {viewport_tokens} tokens')
+			print(
+				f'Small expansion (100px):  {small_count} elements (+{small_count - viewport_count}), {small_tokens} tokens'
+			)
+			print(
+				f'Medium expansion (200px): {medium_count} elements (+{medium_count - viewport_count}), {medium_tokens} tokens'
+			)
+			print(
+				f'All elements (-1):        {all_count} elements (+{all_count - viewport_count}), {all_tokens} tokens'
+			)
+
+			input('\nPress Enter to continue to next website...')
+
+			# Clear highlights before next website
+			await page.evaluate(
+				'document.getElementById("playwright-highlight-container")?.remove()'
+			)
+
+
+if __name__ == '__main__':
+	asyncio.run(test_process_html_file())

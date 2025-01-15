@@ -9,14 +9,14 @@
         if (!container) {
             container = document.createElement('div');
             container.id = 'playwright-highlight-container';
-            container.style.position = 'fixed';
+            container.style.position = 'absolute';
             container.style.pointerEvents = 'none';
             container.style.top = '0';
             container.style.left = '0';
             container.style.width = '100%';
             container.style.height = '100%';
-            container.style.zIndex = '2147483647'; // Maximum z-index value
-            document.documentElement.appendChild(container);
+            container.style.zIndex = '2147483647';
+            document.body.appendChild(container);
         }
 
         // Generate a color based on the index
@@ -27,7 +27,7 @@
         ];
         const colorIndex = index % colors.length;
         const baseColor = colors[colorIndex];
-        const backgroundColor = `${baseColor}1A`; // 10% opacity version of the color
+        const backgroundColor = `${baseColor}1A`;
 
         // Create highlight overlay
         const overlay = document.createElement('div');
@@ -37,10 +37,10 @@
         overlay.style.pointerEvents = 'none';
         overlay.style.boxSizing = 'border-box';
 
-        // Position overlay based on element
+        // Position overlay based on element, including scroll position
         const rect = element.getBoundingClientRect();
-        let top = rect.top;
-        let left = rect.left;
+        let top = rect.top + window.scrollY;
+        let left = rect.left + window.scrollX;
 
         // Adjust position if element is inside an iframe
         if (parentIframe) {
@@ -54,7 +54,7 @@
         overlay.style.width = `${rect.width}px`;
         overlay.style.height = `${rect.height}px`;
 
-        // Create label
+        // Create label with absolute positioning relative to the overlay
         const label = document.createElement('div');
         label.className = 'playwright-highlight-label';
         label.style.position = 'absolute';
@@ -62,39 +62,28 @@
         label.style.color = 'white';
         label.style.padding = '1px 4px';
         label.style.borderRadius = '4px';
-        label.style.fontSize = `${Math.min(12, Math.max(8, rect.height / 2))}px`; // Responsive font size
+        label.style.fontSize = `${Math.min(12, Math.max(8, rect.height / 2))}px`;
         label.textContent = index;
 
         // Calculate label position
-        const labelWidth = 20; // Approximate width
-        const labelHeight = 16; // Approximate height
+        const labelWidth = 20;
+        const labelHeight = 16;
         
-        // Default position (top-right corner inside the box)
+        // Position label relative to the element's position including scroll
         let labelTop = top + 2;
         let labelLeft = left + rect.width - labelWidth - 2;
 
-        // Adjust if box is too small
         if (rect.width < labelWidth + 4 || rect.height < labelHeight + 4) {
-            // Position outside the box if it's too small
             labelTop = top - labelHeight - 2;
             labelLeft = left + rect.width - labelWidth;
-        }
-
-        // Ensure label stays within viewport
-        if (labelTop < 0) labelTop = top + 2;
-        if (labelLeft < 0) labelLeft = left + 2;
-        if (labelLeft + labelWidth > window.innerWidth) {
-            labelLeft = left + rect.width - labelWidth - 2;
         }
 
         label.style.top = `${labelTop}px`;
         label.style.left = `${labelLeft}px`;
 
-        // Add to container
         container.appendChild(overlay);
         container.appendChild(label);
 
-        // Store reference for cleanup
         element.setAttribute('browser-user-highlight-id', `playwright-highlight-${index}`);
 
         return index + 1;
@@ -271,14 +260,15 @@
         const shadowRoot = element.getRootNode();
         if (shadowRoot instanceof ShadowRoot) {
             const rect = element.getBoundingClientRect();
-            const point = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            const point = { 
+                x: rect.left + rect.width / 2, 
+                y: rect.top + rect.height / 2 
+            };
 
             try {
-                // Use shadow root's elementFromPoint to check within shadow DOM context
                 const topEl = shadowRoot.elementFromPoint(point.x, point.y);
                 if (!topEl) return false;
 
-                // Check if the element or any of its parents match our target element
                 let current = topEl;
                 while (current && current !== shadowRoot) {
                     if (current === element) return true;
@@ -286,15 +276,56 @@
                 }
                 return false;
             } catch (e) {
-                return true; // If we can't determine, consider it visible
+                return true;
             }
         }
 
         // Regular DOM elements
         const rect = element.getBoundingClientRect();
-        const point = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 
+        // If viewportExpansion is -1, check if element is the top one at its position
+        if (viewportExpansion === -1) {
+            return true; // Consider all elements as top elements when expansion is -1
+        }
+
+        // Calculate expanded viewport boundaries including scroll position
+        const scrollX = window.scrollX;
+        const scrollY = window.scrollY;
+        const viewportTop = -viewportExpansion + scrollY;
+        const viewportLeft = -viewportExpansion + scrollX;
+        const viewportBottom = window.innerHeight + viewportExpansion + scrollY;
+        const viewportRight = window.innerWidth + viewportExpansion + scrollX;
+
+        // Get absolute element position
+        const absTop = rect.top + scrollY;
+        const absLeft = rect.left + scrollX;
+        const absBottom = rect.bottom + scrollY;
+        const absRight = rect.right + scrollX;
+
+        // Skip if element is completely outside expanded viewport
+        if (absBottom < viewportTop || 
+            absTop > viewportBottom || 
+            absRight < viewportLeft || 
+            absLeft > viewportRight) {
+            return false;
+        }
+
+        // For elements within expanded viewport, check if they're the top element
         try {
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            // Only clamp the point if it's outside the actual document
+            const point = {
+                x: centerX,
+                y: centerY
+            };
+            
+            if (point.x < 0 || point.x >= window.innerWidth || 
+                point.y < 0 || point.y >= window.innerHeight) {
+                return true; // Consider elements with center outside viewport as visible
+            }
+
             const topEl = document.elementFromPoint(point.x, point.y);
             if (!topEl) return false;
 
