@@ -32,7 +32,7 @@ class PlanningManager:
 		"""Get system prompt for task planning"""
 		# get schema of the output model
 		actions = self.outputModel.model_json_schema()['$defs']['ActionModel']['properties'].keys()
-		logger.info(f'Available actions: {actions}')
+		logger.debug(f'Available actions: {actions}')
 		return SystemMessage(
 			content=f"""You are a task planning assistant of browser_use. Your role is to:
 Create a well-structured, clear version of the task
