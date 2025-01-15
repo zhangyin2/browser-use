@@ -3,11 +3,12 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
-from browser_use.agent.message_manager.service_init import MessageManager
 from browser_use.agent.prompts import SystemPrompt
 from browser_use.agent.views import ActionResult
 from browser_use.browser.views import BrowserState, TabInfo
 from browser_use.dom.views import DOMElementNode, DOMTextNode
+
+# NOTE: This is deprecated and should be updated
 
 
 @pytest.fixture(
