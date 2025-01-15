@@ -26,7 +26,7 @@ class Controller:
 
 		# Basic Navigation Actions
 		@self.registry.action(
-			'This does a google search with the query in the current tab',
+			'This does a google search with the given query inside the current tab',
 			requires_browser=True,
 		)
 		async def search_google(query: str, browser: BrowserContext):

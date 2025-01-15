@@ -2,7 +2,7 @@ import asyncio
 from inspect import iscoroutinefunction, signature
 from typing import Any, Callable, Optional, Type
 
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, Field, create_model
 
 from browser_use.browser.context import BrowserContext
 from browser_use.controller.registry.views import (
@@ -34,7 +34,7 @@ class Registry:
 		}
 		# TODO: make the types here work
 		return create_model(
-			f'{function.__name__}Params',
+			f'{function.__name__}_parameters',
 			__base__=ActionModel,
 			**params,  # type: ignore
 		)
@@ -114,7 +114,10 @@ class Registry:
 	def create_action_model(self) -> Type[ActionModel]:
 		"""Creates a Pydantic model from registered actions"""
 		fields = {
-			name: (Optional[action.param_model], None)
+			name: (
+				Optional[action.param_model],
+				Field(default=None, description=action.description),
+			)
 			for name, action in self.registry.actions.items()
 		}
 
