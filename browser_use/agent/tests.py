@@ -9,7 +9,7 @@ from browser_use.agent.views import (
 )
 from browser_use.browser.views import BrowserState, BrowserStateHistory, TabInfo
 from browser_use.controller.registry.service import Registry
-from browser_use.controller.views import ClickElementAction, DoneAction, ExtractPageContentAction
+from browser_use.controller.views import DoneAction
 from browser_use.dom.views import DOMElementNode
 
 
@@ -37,18 +37,12 @@ def action_registry():
 	registry = Registry()
 
 	# Register the actions we need for testing
-	@registry.action(
-		description='Click an element', requires_browser=True, param_model=ClickElementAction
-	)
-	def click_element(params: ClickElementAction, browser=None):
+	@registry.action(description='Click an element', requires_browser=True)
+	def click_element(index: int, browser=None):
 		pass
 
-	@registry.action(
-		description='Extract page content',
-		requires_browser=True,
-		param_model=ExtractPageContentAction,
-	)
-	def extract_page_content(params: ExtractPageContentAction, browser=None):
+	@registry.action(description='Extract page content', requires_browser=True)
+	def extract_page_content(browser=None):
 		pass
 
 	@registry.action(description='Mark task as done', param_model=DoneAction)

@@ -8,18 +8,7 @@ from playwright.async_api import Page
 from browser_use.agent.views import ActionModel, ActionResult
 from browser_use.browser.context import BrowserContext
 from browser_use.controller.registry.service import Registry
-from browser_use.controller.views import (
-	ClickElementAction,
-	DoneAction,
-	ExtractPageContentAction,
-	GoToUrlAction,
-	InputTextAction,
-	OpenTabAction,
-	ScrollAction,
-	SearchGoogleAction,
-	SendKeysAction,
-	SwitchTabAction,
-)
+from browser_use.controller.views import DoneAction
 from browser_use.utils import time_execution_async, time_execution_sync
 
 logger = logging.getLogger(__name__)
@@ -37,57 +26,58 @@ class Controller:
 
 		# Basic Navigation Actions
 		@self.registry.action(
-			'Search Google in the current tab',
-			param_model=SearchGoogleAction,
+			'This does a google search with the query in the current tab',
 			requires_browser=True,
 		)
-		async def search_google(params: SearchGoogleAction, browser: BrowserContext):
+		async def search_google(query: str, browser: BrowserContext):
 			page = await browser.get_current_page()
-			await page.goto(f'https://www.google.com/search?q={params.query}&udm=14')
+			await page.goto(f'https://www.google.com/search?q={query}&udm=14')
 			await page.wait_for_load_state()
-			msg = f'🔍  Searched for "{params.query}" in Google'
+			msg = f'🔍  Searched for "{query}" in Google'
+			logger.info(msg)
+			return ActionResult(extracted_content=msg, include_in_memory=True)
+
+		@self.registry.action('This navigates directlyto the url', requires_browser=True)
+		async def go_to_url(url: str, browser: BrowserContext):
+			page = await browser.get_current_page()
+			await page.goto(url)
+			await page.wait_for_load_state()
+			msg = f'🔗  Navigated to {url}'
 			logger.info(msg)
 			return ActionResult(extracted_content=msg, include_in_memory=True)
 
 		@self.registry.action(
-			'Navigate to URL in the current tab', param_model=GoToUrlAction, requires_browser=True
+			'This navigates to the previous page num_times times (normally 1)',
+			requires_browser=True,
 		)
-		async def go_to_url(params: GoToUrlAction, browser: BrowserContext):
+		async def go_back(num_times: int, browser: BrowserContext):
 			page = await browser.get_current_page()
-			await page.goto(params.url)
-			await page.wait_for_load_state()
-			msg = f'🔗  Navigated to {params.url}'
-			logger.info(msg)
-			return ActionResult(extracted_content=msg, include_in_memory=True)
-
-		@self.registry.action('Go back', requires_browser=True)
-		async def go_back(browser: BrowserContext):
-			page = await browser.get_current_page()
-			await page.go_back()
-			await page.wait_for_load_state()
-			msg = '🔙  Navigated back'
+			for _ in range(num_times):
+				await page.go_back()
+				await page.wait_for_load_state()
+			msg = f'🔙  Navigated back {num_times} times'
 			logger.info(msg)
 			return ActionResult(extracted_content=msg, include_in_memory=True)
 
 		# Element Interaction Actions
 		@self.registry.action(
-			'Click element', param_model=ClickElementAction, requires_browser=True
+			'Click on the interactive element with the index', requires_browser=True
 		)
-		async def click_element(params: ClickElementAction, browser: BrowserContext):
+		async def click_element(index: int, browser: BrowserContext):
 			session = await browser.get_session()
 			state = session.cached_state
 
-			if params.index not in state.selector_map:
+			if index not in state.selector_map:
 				raise Exception(
-					f'Element with index {params.index} does not exist - retry or use alternative actions'
+					f'Element with index {index} does not exist - retry or use alternative actions'
 				)
 
-			element_node = state.selector_map[params.index]
+			element_node = state.selector_map[index]
 			initial_pages = len(session.context.pages)
 
 			# if element has file uploader then dont click
 			if await browser.is_file_uploader(element_node):
-				msg = f'Index {params.index} - has an element which opens file upload dialog. To upload files please use a specific function to upload files '
+				msg = f'Index {index} - has an element which opens file upload dialog. To upload files please use a specific function to upload files '
 				logger.info(msg)
 				return ActionResult(extracted_content=msg, include_in_memory=True)
 
@@ -95,7 +85,7 @@ class Controller:
 
 			try:
 				await browser._click_element_node(element_node)
-				msg = f'🖱️  Clicked button with index {params.index}: {element_node.get_all_text_till_next_clickable_element(max_depth=2)}'
+				msg = f'🖱️  Clicked button with index {index}: {element_node.get_all_text_till_next_clickable_element(max_depth=2)}'
 
 				logger.info(msg)
 				logger.debug(f'Element xpath: {element_node.xpath}')
@@ -107,60 +97,58 @@ class Controller:
 				return ActionResult(extracted_content=msg, include_in_memory=True)
 			except Exception as e:
 				logger.warning(
-					f'Element no longer available with index {params.index} - most likely the page changed'
+					f'Element no longer available with index {index} - most likely the page changed'
 				)
 				return ActionResult(error=str(e))
 
 		@self.registry.action(
 			'Input text into a input interactive element',
-			param_model=InputTextAction,
 			requires_browser=True,
 		)
-		async def input_text(params: InputTextAction, browser: BrowserContext):
+		async def input_text(index: int, text: str, browser: BrowserContext):
 			session = await browser.get_session()
 			state = session.cached_state
 
-			if params.index not in state.selector_map:
+			if index not in state.selector_map:
 				raise Exception(
-					f'Element index {params.index} does not exist - retry or use alternative actions'
+					f'Element index {index} does not exist - retry or use alternative actions'
 				)
 
-			element_node = state.selector_map[params.index]
-			await browser._input_text_element_node(element_node, params.text)
-			msg = f'⌨️  Input "{params.text}" into index {params.index}'
+			element_node = state.selector_map[index]
+			await browser._input_text_element_node(element_node, text)
+			msg = f'⌨️  Input "{text}" into index {index}'
 			logger.info(msg)
 			logger.debug(f'Element xpath: {element_node.xpath}')
 			return ActionResult(extracted_content=msg, include_in_memory=True)
 
 		# Tab Management Actions
-		@self.registry.action('Switch tab', param_model=SwitchTabAction, requires_browser=True)
-		async def switch_tab(params: SwitchTabAction, browser: BrowserContext):
-			await browser.switch_to_tab(params.page_id)
+		@self.registry.action(
+			'This switches the tab to the page with the index', requires_browser=True
+		)
+		async def switch_tab(page_id: int, browser: BrowserContext):
+			await browser.switch_to_tab(page_id)
 			# Wait for tab to be ready
 			page = await browser.get_current_page()
 			await page.wait_for_load_state()
-			msg = f'🔄  Switched to tab {params.page_id}'
+			msg = f'🔄  Switched to tab {page_id}'
 			logger.info(msg)
 			return ActionResult(extracted_content=msg, include_in_memory=True)
 
-		@self.registry.action(
-			'Open url in new tab', param_model=OpenTabAction, requires_browser=True
-		)
-		async def open_tab(params: OpenTabAction, browser: BrowserContext):
-			await browser.create_new_tab(params.url)
-			msg = f'🔗  Opened new tab with {params.url}'
+		@self.registry.action('This opens the url in a new tab', requires_browser=True)
+		async def open_tab(url: str, browser: BrowserContext):
+			await browser.create_new_tab(url)
+			msg = f'🔗  Opened new tab with {url}'
 			logger.info(msg)
 			return ActionResult(extracted_content=msg, include_in_memory=True)
 
 		# Content Actions
 		@self.registry.action(
-			'Extract page content to get the pure text or markdown with links if include_links is set to true',
-			param_model=ExtractPageContentAction,
+			'Extract page content to get the text or markdown with links if include_links is set to true',
 			requires_browser=True,
 		)
-		async def extract_content(params: ExtractPageContentAction, browser: BrowserContext):
+		async def extract_content(include_links: bool, browser: BrowserContext):
 			page = await browser.get_current_page()
-			output_format = 'markdown' if params.include_links else 'text'
+			output_format = 'markdown' if include_links else 'text'
 			html = await page.content()
 			content = MainContentExtractor.extract(  # type: ignore
 				html=html,
@@ -180,19 +168,14 @@ class Controller:
 			)
 
 		@self.registry.action(
-			'Scroll down the page by pixel amount - if no amount is specified, scroll down one page',
-			param_model=ScrollAction,
+			'Scroll down the page by pixel amount',
 			requires_browser=True,
 		)
-		async def scroll_down(params: ScrollAction, browser: BrowserContext):
+		async def scroll_down(amount: int, browser: BrowserContext):
 			page = await browser.get_current_page()
-			if params.amount is not None:
-				await page.evaluate(f'window.scrollBy(0, {params.amount});')
-			else:
-				await page.keyboard.press('PageDown')
+			await page.evaluate(f'window.scrollBy(0, {amount});')
 
-			amount = f'{params.amount} pixels' if params.amount is not None else 'one page'
-			msg = f'🔍  Scrolled down the page by {amount}'
+			msg = f'🔍  Scrolled down the page by {amount} pixels'
 			logger.info(msg)
 			return ActionResult(
 				extracted_content=msg,
@@ -201,19 +184,14 @@ class Controller:
 
 		# scroll up
 		@self.registry.action(
-			'Scroll up the page by pixel amount - if no amount is specified, scroll up one page',
-			param_model=ScrollAction,
+			'Scroll up the page by pixel amount',
 			requires_browser=True,
 		)
-		async def scroll_up(params: ScrollAction, browser: BrowserContext):
+		async def scroll_up(amount: int, browser: BrowserContext):
 			page = await browser.get_current_page()
-			if params.amount is not None:
-				await page.evaluate(f'window.scrollBy(0, -{params.amount});')
-			else:
-				await page.keyboard.press('PageUp')
+			await page.evaluate(f'window.scrollBy(0, -{amount});')
 
-			amount = f'{params.amount} pixels' if params.amount is not None else 'one page'
-			msg = f'🔍  Scrolled up the page by {amount}'
+			msg = f'🔍  Scrolled up the page by {amount} pixels'
 			logger.info(msg)
 			return ActionResult(
 				extracted_content=msg,
@@ -222,20 +200,18 @@ class Controller:
 
 		# send keys
 		@self.registry.action(
-			'Send strings of special keys like Backspace, Insert, PageDown, Delete, Enter, Shortcuts such as `Control+o`, `Control+Shift+T` are supported as well. This gets used in keyboard.press. Be aware of different operating systems and their shortcuts',
-			param_model=SendKeysAction,
+			'Send strings of special keys like Backspace, Insert, PageDown, Delete, Enter, Shortcuts such as `Control+o`, `Control+Shift+T` are supported as well. This is used in keyboard.press(keys). Be aware of different operating systems and their shortcuts',
 			requires_browser=True,
 		)
-		async def send_keys(params: SendKeysAction, browser: BrowserContext):
+		async def send_keys(keys: str, browser: BrowserContext):
 			page = await browser.get_current_page()
-
-			await page.keyboard.press(params.keys)
-			msg = f'⌨️  Sent keys: {params.keys}'
+			await page.keyboard.press(keys)
+			msg = f'⌨️  Sent keys: {keys}'
 			logger.info(msg)
 			return ActionResult(extracted_content=msg, include_in_memory=True)
 
 		@self.registry.action(
-			description='If you dont find something which you want to interact with, scroll to it',
+			description='This will scroll to the first occurence of the text',
 			requires_browser=True,
 		)
 		async def scroll_to_text(text: str, browser: BrowserContext):  # type: ignore

@@ -1,49 +1,11 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel
-
-
-# Action Input Models
-class SearchGoogleAction(BaseModel):
-	query: str
-
-
-class GoToUrlAction(BaseModel):
-	url: str
-
-
-class ClickElementAction(BaseModel):
-	index: int
-	xpath: Optional[str] = None
-
-
-class InputTextAction(BaseModel):
-	index: int
-	text: str
-	xpath: Optional[str] = None
+from pydantic import BaseModel, Field
 
 
 class DoneAction(BaseModel):
-	text: str
-	status_reason: str
-	status: Literal['success', 'failure', 'unknown']
-
-
-class SwitchTabAction(BaseModel):
-	page_id: int
-
-
-class OpenTabAction(BaseModel):
-	url: str
-
-
-class ExtractPageContentAction(BaseModel):
-	include_links: bool
-
-
-class ScrollAction(BaseModel):
-	amount: Optional[int] = None  # The number of pixels to scroll. If None, scroll down/up one page
-
-
-class SendKeysAction(BaseModel):
-	keys: str
+	text: str = Field(..., description='The text to output to the user')
+	status: Literal['success', 'failure', 'unknown'] = Field(
+		..., description='If the task was successful completed, failed or you are unsure'
+	)
+	status_reason: str = Field(..., description='The reason for the status')
