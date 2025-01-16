@@ -51,6 +51,7 @@ class MessageManager:
 		self.IMG_TOKENS = image_tokens
 		self.include_attributes = include_attributes
 		self.max_error_length = max_error_length
+		self.memory = {}  # Key-value store for agent memory
 
 		system_message = self.system_prompt_class(
 			self.action_descriptions,
@@ -153,6 +154,27 @@ class MessageManager:
 	def set_last_output(self, model_output: AgentOutput):
 		self.id += 1
 
+		# Handle memory operations
+		if model_output.current_state.store_memory:
+			self.update_memory(model_output.current_state.store_memory)
+
+		if model_output.current_state.get_memory:
+			# Create memory state message showing all keys
+			memory_state = []
+			requested_values = set(model_output.current_state.get_memory)
+
+			for key, value in self.memory.items():
+				if value in requested_values:
+					memory_state.append(f'{key}: {value}')
+				else:
+					memory_state.append(f'{key}: ...')
+
+			# Add memory state as a human message
+			if memory_state:
+				self.prompt.append(
+					HumanMessage(content='Current memory state:\n' + '\n'.join(memory_state))
+				)
+
 		tool_calls = [
 			{
 				'name': 'AgentOutput',
@@ -167,3 +189,17 @@ class MessageManager:
 			content='',
 			tool_calls=tool_calls,
 		)
+
+	def get_memory_value(self, value: str) -> list[str]:
+		"""Get all keys from memory that have the given value"""
+		return [key for key, val in self.memory.items() if val == value]
+
+	def get_memory_keys(self) -> list[str]:
+		"""Get all available memory keys"""
+		return list(self.memory.keys())
+
+	def update_memory(self, updates: list[dict[str, str]]) -> None:
+		"""Update memory with key-value pairs"""
+		for update in updates:
+			for key, value in update.items():
+				self.memory[key] = value

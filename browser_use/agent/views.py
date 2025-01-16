@@ -40,8 +40,10 @@ class AgentBrain(BaseModel):
 	"""Current state of the agent"""
 
 	evaluation_previous_goal: str
-	memory: str
+	memory: str  # Narrative description of current state and history
 	next_goal: str
+	store_memory: Optional[list[dict[str, str]]] = None  # Optional key-value pairs to store
+	get_memory: Optional[list[str]] = None  # Optional keys to retrieve
 
 
 class AgentOutput(BaseModel):

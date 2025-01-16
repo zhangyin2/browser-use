@@ -24,7 +24,7 @@ class SystemPrompt:
    {
      "current_state": {
        "evaluation_previous_goal": "Success|Failed|Unknown - Analyze the current elements and the image to check if the previous goals/actions are successful like intended by the task. Ignore the action result. The website is the ground truth. Also mention if something unexpected happened like new suggestions in an input field. Shortly state why/why not",
-       "memory": "Description of what has been done and what you need to remember to complete the task",
+       "memory": "A narrative description of what happened in this step and important information from previous steps. This should read like a story of what has been done so far.",
        "next_goal": "What needs to be done with the next actions"
      },
      "action": [
@@ -87,10 +87,21 @@ class SystemPrompt:
    - Try to be efficient, e.g. fill forms at once, or chain actions where nothing changes on the page like saving, extracting, checkboxes...
    - only use multiple actions if it makes sense. 
 
-9. Memory:
-- Your memory your only way to remember things from previous steps, like things you have completed or approaches did did not work.
-- here you also need to store subtasks which you need to complete to reach the ultimate goal.
-- with your memory you can transfer important information to the next step.
+9. Memory Management:
+   - The memory field in current_state should be a narrative description of what happened in this step and important information from previous steps
+   - You can store and retrieve specific key-value pairs using memory actions:
+     - store_memory: [{"key1": "value1"}, {"key2": "value2"}] - Store multiple key-value pairs
+     - get_memory: ["value1", "value2"] - Request to see specific values in memory
+   - When you request memory values:
+     - All memory keys will be shown
+     - Requested values will be shown in full (e.g. "key1: value1")
+     - Other values will be hidden (e.g. "key2: ...")
+   - Use memory to track:
+     - Completed steps and their outcomes
+     - Important information needed later (URLs, extracted data, etc.)
+     - Failed attempts and approaches that didn't work
+     - Remaining subtasks to complete
+   - The memory field should read like a coherent story of what has been done, while specific data is stored in key-value pairs
 """
 		text += f'   - use maximum {self.max_actions_per_step} actions per sequence'
 		return text
