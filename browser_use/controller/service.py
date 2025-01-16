@@ -481,7 +481,9 @@ class Controller:
 				)
 				if not new_path_hashes.issubset(cached_path_hashes):
 					# next action requires index but there are new elements on the page
-					logger.info(f'Something new appeared after action {i} / {len(actions)}')
+					logger.info(
+						f'Something new appeared after action {i} / {len(actions)}. The other actions are not yet executed. Check the new content and react accordingly to finsih your goal or perform the unfinished actions again'
+					)
 					break
 
 			results.append(await self.act(action, browser_context))
