@@ -51,7 +51,6 @@ class MessageManager:
 		self.IMG_TOKENS = image_tokens
 		self.include_attributes = include_attributes
 		self.max_error_length = max_error_length
-		self.memory = {}  # Key-value store for agent memory
 
 		system_message = self.system_prompt_class(
 			self.action_descriptions,
@@ -84,6 +83,11 @@ class MessageManager:
 			SystemMessage(content=system_message),
 			HumanMessage(content=self.task_instructions(task)),
 		]
+
+		self.memory = {'ultimate_goal': self.task}
+		msg = 'your long term memory is:\n'
+		msg = f'ultimate_goal: {self.task}'
+		self.memory_state = HumanMessage(content=msg)
 
 	@staticmethod
 	def task_instructions(task: str) -> str:
@@ -122,6 +126,9 @@ class MessageManager:
 			)
 		)
 
+		# 4. Memory message
+		messages.append(self.memory_state)
+
 		# 4. Add human message with screenshot if using vision
 		human_msg = (
 			'This is the current page, give me the next action to reach my ultimate goal: \n'
@@ -155,25 +162,28 @@ class MessageManager:
 		self.id += 1
 
 		# Handle memory operations
-		if model_output.current_state.store_memory:
-			self.update_memory(model_output.current_state.store_memory)
+		# if model_output.current_state.store_memory:
+		# 	self.update_memory(model_output.current_state.store_memory)
 
-		if model_output.current_state.get_memory:
-			# Create memory state message showing all keys
-			memory_state = []
-			requested_values = set(model_output.current_state.get_memory)
+		# Create memory state message showing all keys
+		memory_state = []
+		requested_values = (
+			set(model_output.current_state.get_memory)
+			if model_output.current_state.get_memory
+			else set()
+		)
 
-			for key, value in self.memory.items():
-				if value in requested_values:
-					memory_state.append(f'{key}: {value}')
-				else:
-					memory_state.append(f'{key}: ...')
+		for key, value in self.memory.items():
+			if key in requested_values:
+				memory_state.append(f'{key}: {value}')
+			else:
+				memory_state.append(f'{key}: ...')
 
-			# Add memory state as a human message
-			if memory_state:
-				self.prompt.append(
-					HumanMessage(content='Current memory state:\n' + '\n'.join(memory_state))
-				)
+		# Add memory state as a human message
+		if memory_state:
+			self.memory_state = HumanMessage(
+				content='Long term memory:\n' + '\n'.join(memory_state)
+			)
 
 		tool_calls = [
 			{

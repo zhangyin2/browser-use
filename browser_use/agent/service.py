@@ -420,7 +420,7 @@ class Agent:
 
 	def _log_agent_run(self) -> None:
 		"""Log the agent run"""
-		logger.info(f'🚀 Starting task: {self.task}')
+		logger.info(f'🚀 Starting task: \n{self.task}')
 
 		self.telemetry.capture(
 			AgentRunTelemetryEvent(

@@ -19,13 +19,15 @@ class SystemPrompt:
 		"""
 		Returns the important rules for the agent.
 		"""
+		# "store_memory": [{"completed_google_search": "The requested link and information xyz about the company"}, {"todo_for_later_search_urls": "To finish the task we need to search and extract this urls: .... "}],
 		text = """
 1. RESPONSE FORMAT: You must ALWAYS respond with valid JSON in this exact format:
    {
      "current_state": {
        "evaluation_previous_goal": "Success|Failed|Unknown - Analyze the current elements and the image to check if the previous goals/actions are successful like intended by the task. Ignore the action result. The website is the ground truth. Also mention if something unexpected happened like new suggestions in an input field. Shortly state why/why not",
        "memory": "A narrative description of what happened in this step and important information from previous steps. This should read like a story of what has been done so far.",
-       "next_goal": "What needs to be done with the next actions"
+       "next_goal": "What needs to be done with the next actions",
+       "get_memory": ["todo_for_later_search_urls"]
      },
      "action": [
        {
@@ -88,7 +90,7 @@ class SystemPrompt:
    - only use multiple actions if it makes sense. 
 
 9. Memory Management:
-   - The memory field in current_state should be a narrative description of what happened in this step and important information from previous steps
+   - The memory field in current_state should be a narrative description of what happened so far and important information from previous steps
    - You can store and retrieve specific key-value pairs using memory actions:
      - store_memory: [{"key1": "value1"}, {"key2": "value2"}] - Store multiple key-value pairs
      - get_memory: ["value1", "value2"] - Request to see specific values in memory
@@ -114,7 +116,8 @@ Your input is always:
  2. ultimate goal
  3. your previous output with eval, memory, next goal and actions
  4. the result of the previous action (if any) with action result and errors
- 5. the current state of the browser:
+ 5. Your long term memory state
+ 6. the current state of the browser:
     - Current URL: The webpage you're currently on
     - Available Tabs: List of open browser tabs
     - Interactive Elements: List in the format:
@@ -141,9 +144,9 @@ Notes:
 		"""
 		time_str = self.current_date.strftime('%Y-%m-%d %H:%M')
 
-		AGENT_PROMPT = f"""You are a precise browser automation agent that interacts with websites through structured commands. Your role is to:
-1. Analyze the provided webpage elements and structure
-2. Plan a sequence of actions to accomplish the given task
+		AGENT_PROMPT = f"""You are a browser automation agent that interacts with websites. Your role is to:
+1. Analyze the provided webpage interactable elements and
+2. Plan a sequence of actions to accomplish the ultimate goal
 
 
 Current date and time: {time_str}

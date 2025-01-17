@@ -39,11 +39,21 @@ class ActionResult(BaseModel):
 class AgentBrain(BaseModel):
 	"""Current state of the agent"""
 
-	evaluation_previous_goal: str
-	memory: str  # Narrative description of current state and history
-	next_goal: str
-	store_memory: Optional[list[dict[str, str]]] = None  # Optional key-value pairs to store
-	get_memory: Optional[list[str]] = None  # Optional keys to retrieve
+	evaluation_previous_goal: str = Field(
+		description='Analyze the current elements and the image to check if the previous goals are achieved. The website is the ground truth. Also mention if something unexpected happened like new suggestions in an input field. Shortly state why/why not.'
+	)
+	memory: str = Field(
+		description='A narrative description of what happened so far include everything you need to remeber from the previous memory.'
+	)
+	next_goal: str = Field(
+		description='The next immediate goal to achieve to reach the ultimate goal. '
+	)
+	# store_memory: list[dict[str, str]] = Field(
+	# 	description='List of key-value pairs to store. you should use this to store important information that you need to remember or current progress of what worked and what did not work.'
+	# )
+	get_memory: list[str] = Field(
+		description='Keys to retrieve from the memory object. You should use this to get the information you need for the next step.'
+	)
 
 
 class AgentOutput(BaseModel):
@@ -54,8 +64,12 @@ class AgentOutput(BaseModel):
 
 	model_config = ConfigDict(arbitrary_types_allowed=True)
 
-	current_state: AgentBrain
-	action: list[ActionModel]
+	current_state: AgentBrain = Field(
+		description='The current state of the agent. This includes the evaluation of the previous goal, the memory, the next goal, and the store_memory and get_memory fields.'
+	)
+	action: list[ActionModel] = Field(
+		description='The action to be executed. This is a list of actions that are to be executed in sequence.'
+	)
 
 	@staticmethod
 	def type_with_custom_actions(custom_actions: Type[ActionModel]) -> Type['AgentOutput']:
