@@ -83,6 +83,7 @@ class MessageManager:
 			SystemMessage(content=system_message),
 			HumanMessage(content=self.task_instructions(task)),
 		]
+		self.summaries = []
 
 	@staticmethod
 	def task_instructions(task: str) -> str:
@@ -110,10 +111,14 @@ class MessageManager:
 		# 1. Add system message and task message (these are already in the prompt template)
 		messages.extend(self.prompt)
 
-		# 2. Add AI message (last output)
+		# 2. Add summaries except the last one because it is the current model output
+		for i, summary in enumerate(self.summaries[:-1]):
+			messages.append(HumanMessage(content=f'Summary step {i + 1}: {summary}'))
+
+		# 3. Add AI message (last output)
 		messages.append(self.last_output)
 
-		# 3. Add tool message with result of the tool call
+		# 4. Add tool message with result of the tool call
 		messages.append(
 			ToolMessage(
 				content=browser_state.get_result_and_error_description(),
@@ -121,7 +126,7 @@ class MessageManager:
 			)
 		)
 
-		# 4. Add human message with screenshot if using vision
+		# 5. Add human message with screenshot if using vision
 		human_msg = (
 			'This is the current page, give me the next action to reach my ultimate goal: \n'
 			+ browser_state.get_state_description()
@@ -167,3 +172,4 @@ class MessageManager:
 			content='',
 			tool_calls=tool_calls,
 		)
+		self.summaries.append(model_output.summary_of_previous_steps)

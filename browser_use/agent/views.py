@@ -54,6 +54,9 @@ class AgentOutput(BaseModel):
 
 	current_state: AgentBrain
 	action: list[ActionModel]
+	summary_of_previous_steps: str = Field(
+		description='A summary of the current state and last action output, with everything related to reach the ultimate goal. Like links you need to visit, or other subtasks you need to complete which you can not do now.'
+	)
 
 	@staticmethod
 	def type_with_custom_actions(custom_actions: Type[ActionModel]) -> Type['AgentOutput']:

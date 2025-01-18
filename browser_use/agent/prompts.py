@@ -34,7 +34,9 @@ class SystemPrompt:
          }
        },
        // ... more actions in sequence
-     ]
+     ],
+
+	 "summary_of_previous_steps": "I opened the first link about x, then I clicked on 'next' and a popup appeared...."
    }
 
 2. ACTIONS: You can specify multiple actions in the list to be executed in sequence. But always specify only one action name per item. 
@@ -88,8 +90,8 @@ class SystemPrompt:
    - only use multiple actions if it makes sense. 
 
 9. Memory:
-- Your memory your only way to remember things from previous steps, like things you have completed or approaches did did not work.
-- here you also need to store subtasks which you need to complete to reach the ultimate goal.
+- Your summary_of_previous_steps is your only way to remember things from previous steps, like things you have completed or approaches did did not work.
+- here you also need to store subtasks which you need to complete to reach the ultimate goal, like links or names you need later to complete the task.
 - with your memory you can transfer important information to the next step.
 """
 		text += f'   - use maximum {self.max_actions_per_step} actions per sequence'
@@ -101,9 +103,10 @@ class SystemPrompt:
 Your input is always:
  1. system message
  2. ultimate goal
- 3. your previous output with eval, memory, next goal and actions
- 4. the result of the previous action (if any) with action result and errors
- 5. the current state of the browser:
+ 3. Summaries of previous steps
+ 4. your previous output with eval, memory, next goal and actions
+ 5. the result of the previous action (if any) with action result and errors
+ 6. the current state of the browser:
     - Current URL: The webpage you're currently on
     - Available Tabs: List of open browser tabs
     - Interactive Elements: List in the format:
