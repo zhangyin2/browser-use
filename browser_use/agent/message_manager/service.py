@@ -172,4 +172,8 @@ class MessageManager:
 			content='',
 			tool_calls=tool_calls,
 		)
-		self.summaries.append(model_output.summary_of_previous_steps)
+		self.summaries.append(
+			model_output.state_extraction
+			+ f'\nCompleted subtasks: {model_output.completed_subtasks}'
+			+ f'\nFailed subtasks: {model_output.failed_subtasks}'
+		)

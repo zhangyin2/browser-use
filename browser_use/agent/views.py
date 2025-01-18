@@ -54,8 +54,17 @@ class AgentOutput(BaseModel):
 
 	current_state: AgentBrain
 	action: list[ActionModel]
-	summary_of_previous_steps: str = Field(
+	state_extraction: str = Field(
 		description='A summary of the current state and last action output, with everything related to reach the ultimate goal. Like links you need to visit, or other subtasks you need to complete which you can not do now.'
+	)
+	confidence: float = Field(
+		description='A confidence score between 0 and 100 of how confident you are that the current state and last action output are correct and will lead to the ultimate goal.'
+	)
+	completed_subtasks: str = Field(
+		description='A summary of the subtasks you have completed to reach the ultimate goal in the last step.'
+	)
+	failed_subtasks: str = Field(
+		description='A summary of the subtasks you have failed to complete to reach the ultimate goal in the last step.'
 	)
 
 	@staticmethod
