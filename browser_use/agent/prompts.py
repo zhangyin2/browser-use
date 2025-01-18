@@ -20,36 +20,16 @@ class SystemPrompt:
 		Returns the important rules for the agent.
 		"""
 		text = """
-1. RESPONSE FORMAT: You must ALWAYS respond with valid JSON in this exact format:
-   {
-     "current_state": {
-       "evaluation_previous_goal": "Success|Failed|Unknown - Analyze the current elements and the image to check if the previous goals/actions are successful like intended by the task. Ignore the action result. The website is the ground truth. Also mention if something unexpected happened like new suggestions in an input field. Shortly state why/why not",
-       "memory": "Description of what has been done and what you need to remember to complete the task",
-       "next_goal": "What needs to be done with the next immediate actions"
-     },
-     "action": [
-       {
-         "one_action_name": {
-           // action-specific parameter
-         }
-       },
-       // ... more actions in sequence
-     ],
-  "completed_subtasks": "Opened link a, scrlled down, and found x",
-  "failed_subtasks": "Failed to find x",
-	"state_extraction": "Extract from current state to remember for future steps: Link a, b, c, d, e, f which i need to visit later.",
-	"confidence": 90 // e.g. if you fail or get stuck this should drop significantly
-   }
 
 2. ACTIONS: You can specify multiple actions in the list to be executed in sequence. But always specify only one action name per item. 
 
    Common action sequences:
-   - Form filling: [
+    - Form filling: action : [
        {"input_text": {"index": 1, "text": "username"}},
        {"input_text": {"index": 2, "text": "password"}},
        {"click_element": {"index": 3}}
      ]
-   - Navigation and extraction: [
+   - Navigation and extraction: action : [
        {"open_new_tab": {}},
        {"go_to_url": {"url": "https://example.com"}},
        {"extract_page_content": {}}
@@ -91,10 +71,6 @@ class SystemPrompt:
    - Try to be efficient, e.g. fill forms at once, or chain actions where nothing changes on the page like saving, extracting, checkboxes...
    - only use multiple actions if it makes sense. 
 
-9. Memory:
-- Your state_extraction is your only way to remember things from the current state and action result for next steps. It is very important that you extract all information from the current state that you need to complete the task e.g. links from the current state which you need to visit later.
-- In state_extraction  you also need to store subtasks which you need to complete to reach the ultimate goal, like links or names you need later to complete the task.
-- with your memory you can transfer important information to the next step.
 """
 		text += f'   - use maximum {self.max_actions_per_step} actions per sequence'
 		return text

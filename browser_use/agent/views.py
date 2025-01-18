@@ -39,9 +39,22 @@ class ActionResult(BaseModel):
 class AgentBrain(BaseModel):
 	"""Current state of the agent"""
 
-	evaluation_previous_goal: str
-	memory: str
-	next_goal: str
+	evaluation_previous_goal: str = Field(
+		description='Success|Failed|Unknown - if the previous goal was successful, failed or unknown. and why.'
+	)
+	memory: str = Field(
+		description='Things you have to remember to reach the ultimate goal. From the current state.'
+	)
+	next_goal: str = Field(description='Immediate goal to reach with your next action.')
+	todo_subtasks: str = Field(
+		description='Plan from the current state subtasks you need to complete to reach the ultimate goal.'
+	)
+	completed_subtask: str = Field(
+		description='A summary of the subtasks you have completed to reach the ultimate goal in the last step.'
+	)
+	confidence: float = Field(
+		description='A confidence score between 0 and 100 of how confident you are that your output is correct and will lead to the ultimate goal. If you are stuck, this score should be low.'
+	)
 
 
 class AgentOutput(BaseModel):
@@ -54,18 +67,6 @@ class AgentOutput(BaseModel):
 
 	current_state: AgentBrain
 	action: list[ActionModel]
-	state_extraction: str = Field(
-		description='A summary of the current state and last action output, with everything related to reach the ultimate goal. Like links you need to visit, or other subtasks you need to complete which you can not do now.'
-	)
-	confidence: float = Field(
-		description='A confidence score between 0 and 100 of how confident you are that the current state and last action output are correct and will lead to the ultimate goal.'
-	)
-	completed_subtasks: str = Field(
-		description='A summary of the subtasks you have completed to reach the ultimate goal in the last step.'
-	)
-	failed_subtasks: str = Field(
-		description='A summary of the subtasks you have failed to complete to reach the ultimate goal in the last step.'
-	)
 
 	@staticmethod
 	def type_with_custom_actions(custom_actions: Type[ActionModel]) -> Type['AgentOutput']:

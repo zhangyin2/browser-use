@@ -60,14 +60,16 @@ class MessageManager:
 
 		self.id = 1
 
-		tool_call_example = [
+		self.tool_call_example = [
 			{
 				'name': 'AgentOutput',
 				'args': {
 					'current_state': {
 						'evaluation_previous_goal': 'Unknown - no previous action',
-						'memory': 'Nothing completed yet',
-						'next_goal': 'Open the browser',
+						'next_goal': 'Open the browser to start with the task',
+						'completed_subtask': 'Started task',
+						'todo_subtasks': 'Break down the state and task into clear subtasks',
+						'confidence': 100,
 					},
 					'action': [{'go_to_url': 'blank'}],
 				},
@@ -78,12 +80,12 @@ class MessageManager:
 
 		# tool_call = AIMessage(content='', tool_call_id='1', tool_calls=tool_call_example)
 		# tool_answer = ToolMessage(content='', tool_call_id='1')
-		self.last_output = AIMessage(content='', tool_calls=tool_call_example)
+		self.last_output = AIMessage(content='', tool_calls=self.tool_call_example)
 		self.prompt = [
 			SystemMessage(content=system_message),
 			HumanMessage(content=self.task_instructions(task)),
 		]
-		self.summaries = []
+		self.past_states = []
 
 	@staticmethod
 	def task_instructions(task: str) -> str:
@@ -112,8 +114,8 @@ class MessageManager:
 		messages.extend(self.prompt)
 
 		# 2. Add summaries except the last one because it is the current model output
-		for i, summary in enumerate(self.summaries[:-1]):
-			messages.append(HumanMessage(content=f'Summary step {i + 1}: {summary}'))
+		for i, past_state in enumerate(self.past_states[:-1]):
+			messages.append(HumanMessage(content=f'Step {i + 1} state: {past_state}'))
 
 		# 3. Add AI message (last output)
 		messages.append(self.last_output)
@@ -172,8 +174,4 @@ class MessageManager:
 			content='',
 			tool_calls=tool_calls,
 		)
-		self.summaries.append(
-			model_output.state_extraction
-			+ f'\nCompleted subtasks: {model_output.completed_subtasks}'
-			+ f'\nFailed subtasks: {model_output.failed_subtasks}'
-		)
+		self.past_states.append(model_output.current_state.model_dump())

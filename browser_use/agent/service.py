@@ -348,10 +348,9 @@ class Agent:
 			logger.info(
 				f'🛠️  Action {i + 1}/{len(response.action)}: {action.model_dump_json(exclude_unset=True)}'
 			)
-		logger.info(f'🔍 Summary of state: {response.state_extraction}')
-		logger.info(f'🔍 Confidence: {response.confidence}')
-		logger.info(f'🔍 Completed subtasks: {response.completed_subtasks}')
-		logger.info(f'🔍 Failed subtasks: {response.failed_subtasks}')
+		logger.info(f'🔍 Todo subtasks: {response.current_state.todo_subtasks}')
+		logger.info(f'🔍 Completed subtask: {response.current_state.completed_subtask}')
+		logger.info(f'🔍 Confidence: {response.current_state.confidence}')
 
 	def _save_conversation(self, input_messages: list[BaseMessage], response: Any) -> None:
 		"""Save conversation history to file if path is specified"""
