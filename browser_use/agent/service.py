@@ -89,11 +89,11 @@ class Agent:
 			'alt',
 			'aria-expanded',
 		],
-		max_error_length: int = 400,
+		max_error_length: int = 200,
 		max_actions_per_step: int = 10,
 		plan_task: bool = False,
 		tool_calling_method: Optional[str] = 'auto',
-		max_num_of_msg_in_history: int = 10,
+		max_num_of_msg_in_history: int = 15,
 	):
 		self.agent_id = str(uuid.uuid4())  # unique identifier for the agent
 

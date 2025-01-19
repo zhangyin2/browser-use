@@ -34,7 +34,7 @@ class MessageManager:
 		system_prompt_class: Type[SystemPrompt],
 		include_attributes: list[str] = [],
 		max_error_length: int = 200,
-		max_num_of_msg_in_history: int = 10,
+		max_num_of_msg_in_history: int = 15,
 		use_vision: bool = True,
 		max_actions_per_step: int = 10,
 	):
@@ -206,7 +206,7 @@ class MessageManager:
 		for i, msg in enumerate(messages):
 			logger.debug(f'  {i}: {msg.__class__.__name__}')
 			if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls'):
-				logger.debug(f'    tool_calls: {msg.tool_calls}')
+				logger.debug(f'    tool_calls: {msg.tool_calls[0]["id"]}')
 			if isinstance(msg, ToolMessage):
 				logger.debug(f'    tool_call_id: {msg.tool_call_id}')
 
