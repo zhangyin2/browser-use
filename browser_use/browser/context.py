@@ -102,7 +102,7 @@ class BrowserContextConfig:
 	trace_path: str | None = None
 
 	highlight_elements: bool = True
-	viewport_expansion: int = 800
+	viewport_expansion: int = 400
 
 
 @dataclass

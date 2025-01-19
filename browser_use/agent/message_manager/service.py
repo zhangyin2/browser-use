@@ -145,12 +145,6 @@ class MessageManager:
 				current_id = str(i + 1)
 				logger.debug(f'Processing step {i + 1} with tool call ID {current_id}')
 
-				# Add step state
-				step_msg = f'Step {i + 1} state:\n'
-				step_msg += f'{output.current_state.model_dump_json(indent=2)}\n'
-
-				messages.append(HumanMessage(content=step_msg))
-
 				# Add tool call
 				messages.append(
 					AIMessage(
