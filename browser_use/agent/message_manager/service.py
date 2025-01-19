@@ -18,8 +18,9 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from browser_use.agent.message_manager.views import MessageHistory, MessageMetadata
-from browser_use.agent.prompts import AgentMessagePrompt, SystemPrompt
+from browser_use.agent.prompts import SystemPrompt
 from browser_use.agent.views import ActionResult, AgentOutput, AgentStepInfo
+from browser_use.browser.context import BrowserContext
 from browser_use.browser.views import BrowserState
 
 logger = logging.getLogger(__name__)
@@ -32,9 +33,6 @@ class MessageManager:
 		task: str,
 		action_descriptions: str,
 		system_prompt_class: Type[SystemPrompt],
-		max_input_tokens: int = 128000,
-		estimated_tokens_per_character: int = 3,
-		image_tokens: int = 800,
 		include_attributes: list[str] = [],
 		max_error_length: int = 400,
 		max_actions_per_step: int = 10,
@@ -42,105 +40,106 @@ class MessageManager:
 	):
 		self.llm = llm
 		self.use_vision = use_vision
-		self.system_prompt_class = system_prompt_class
-		self.max_input_tokens = max_input_tokens
-		self.history = MessageHistory()
 		self.task = task
-		self.action_descriptions = action_descriptions
-		self.ESTIMATED_TOKENS_PER_CHARACTER = estimated_tokens_per_character
-		self.IMG_TOKENS = image_tokens
 		self.include_attributes = include_attributes
 		self.max_error_length = max_error_length
 
-		system_message = self.system_prompt_class(
-			self.action_descriptions,
+		# Initialize system prompt
+		self.system_prompt = system_prompt_class(
+			action_descriptions,
 			current_date=datetime.now(),
 			max_actions_per_step=max_actions_per_step,
-		).get_system_message()
+		)
 
-		self.id = 1
+		# History tracking
+		self.past_steps: list[tuple[AgentOutput, List[ActionResult]]] = []
+		self.tool_call_id = 1
 
-		self.tool_call_example = [
-			{
-				'name': 'AgentOutput',
-				'args': {
-					'current_state': {
-						'evaluation_previous_goal': 'Unknown - no previous action',
-						'next_goal': 'Open the browser to start with the task',
-						'completed_subtask': 'Started task',
-						'todo_subtasks': 'Break down the state and task into clear subtasks',
-						'confidence': 100,
-					},
-					'action': [{'go_to_url': 'blank'}],
-				},
-				'id': str(self.id),
-				'type': 'tool_call',
-			}
-		]
+	def _format_results(self, results: List[ActionResult]) -> str:
+		"""Format results into a message string"""
+		message = ''
+		for i, result in enumerate(results, 1):
+			if result.extracted_content:
+				message += f'\nAction result {i}/{len(results)}: {result.extracted_content}'
+			if result.error:
+				error = result.error[-self.max_error_length :]  # Only use last part of error
+				message += f'\nAction error {i}/{len(results)}: ...{error}'
+		return message
 
-		# tool_call = AIMessage(content='', tool_call_id='1', tool_calls=tool_call_example)
-		# tool_answer = ToolMessage(content='', tool_call_id='1')
-		self.last_output = AIMessage(content='', tool_calls=self.tool_call_example)
-		self.prompt = [
-			SystemMessage(content=system_message),
-			HumanMessage(content=self.task_instructions(task)),
-		]
-		self.past_states = []
+	@property
+	def system_message(self) -> SystemMessage:
+		return SystemMessage(content=self.system_prompt.get_system_message())
 
-	@staticmethod
-	def task_instructions(task: str) -> str:
-		content = f'Your ultimate task is: {task}. If you achieved your ultimate task, stop everything and use the done action in the next step to complete the task. If not, continue as usual.'
-		return content
+	@property
+	def task_message(self) -> HumanMessage:
+		return HumanMessage(
+			content=f'Your ultimate task is: {self.task}. If you achieved your ultimate task, stop everything and use the done action in the next step to complete the task. If not, continue as usual.'
+		)
 
-	def get_messages(
+	async def get_messages(
 		self,
 		state: BrowserState,
-		result: Optional[List[ActionResult]] = None,
+		current_results: Optional[List[ActionResult]] = None,
 		step_info: Optional[AgentStepInfo] = None,
+		browser_context: Optional[BrowserContext] = None,
 	) -> list[BaseMessage]:
-		# Format the result and memory state as a string
-		browser_state = AgentMessagePrompt(
-			state,
-			result,
-			include_attributes=self.include_attributes,
-			max_error_length=self.max_error_length,
-			step_info=step_info,
-		)
-
-		# Get the base messages from the prompt template
+		"""Get all messages for the next model call"""
 		messages = []
 
-		# 1. Add system message and task message (these are already in the prompt template)
-		messages.extend(self.prompt)
+		# 1. System message
+		messages.append(self.system_message)
 
-		# 2. Add summaries except the last one because it is the current model output
-		for i, past_state in enumerate(self.past_states[:-1]):
-			messages.append(HumanMessage(content=f'Step {i + 1} state: {past_state}'))
+		# 2. Task message
+		messages.append(self.task_message)
 
-		# 3. Add AI message (last output)
-		messages.append(self.last_output)
+		# 3. Past steps with their results
+		for i, (output, results) in enumerate(self.past_steps, 1):
+			# Add step state
+			step_msg = f'Step {i} state:\n'
+			step_msg += f'Evaluation: {output.current_state.evaluation_previous_goal}\n'
+			step_msg += f'Memory: {output.current_state.memory}\n'
+			step_msg += f'Goal: {output.current_state.next_goal}\n'
 
-		# 4. Add tool message with result of the tool call
-		messages.append(
-			ToolMessage(
-				content=browser_state.get_result_and_error_description(),
-				tool_call_id=str(self.id),
+			# Add results that should be kept in memory
+			memory_results = [r for r in results if r.include_in_memory]
+			if memory_results:
+				step_msg += self._format_results(memory_results)
+
+			messages.append(HumanMessage(content=step_msg))
+			messages.append(
+				AIMessage(
+					content='',
+					tool_calls=[
+						{
+							'name': 'AgentOutput',
+							'args': output.model_dump(exclude_none=True),
+							'id': str(self.tool_call_id + i),
+							'type': 'tool_call',
+						}
+					],
+				)
 			)
-		)
 
-		# 5. Add human message with screenshot if using vision
+		# Add current results if any
+		if current_results:
+			result_msg = self._format_results(current_results)
+			if result_msg:
+				messages.append(
+					ToolMessage(content=result_msg, tool_call_id=str(self.tool_call_id))
+				)
+
+		# 4. Current state with scroll info
+		state_msg = await self._get_state_description(state, step_info, browser_context)
 		human_msg = (
 			'This is the current page, give me the next action to reach my ultimate goal: \n'
-			+ browser_state.get_state_description()
+			+ state_msg
 		)
+
 		if self.use_vision and state.screenshot:
 			messages.append(
 				HumanMessage(
 					content=[
-						{
-							'type': 'text',
-							'text': human_msg,
-						},
+						{'type': 'text', 'text': human_msg},
 						{
 							'type': 'image_url',
 							'image_url': {'url': f'data:image/png;base64,{state.screenshot}'},
@@ -148,30 +147,57 @@ class MessageManager:
 					]
 				)
 			)
-		else:  # no vision
-			messages.append(
-				HumanMessage(
-					content=human_msg,
-				)
-			)
+		else:
+			messages.append(HumanMessage(content=human_msg))
 
 		return messages
 
-	def set_last_output(self, model_output: AgentOutput):
-		self.id += 1
+	async def _get_state_description(
+		self,
+		state: BrowserState,
+		step_info: Optional[AgentStepInfo] = None,
+	) -> str:
+		"""Get state description with scroll info if available"""
+		# Add step info if available
+		if step_info:
+			step_info_description = (
+				f'Current step: {step_info.step_number + 1}/{step_info.max_steps}'
+			)
+		else:
+			step_info_description = ''
 
-		tool_calls = [
-			{
-				'name': 'AgentOutput',
-				'args': model_output.model_dump(exclude_none=True),
-				'id': str(self.id),
-				'type': 'tool_call',
-			}
-		]
-
-		# Create new AI message with the tool calls
-		self.last_output = AIMessage(
-			content='',
-			tool_calls=tool_calls,
+		# Get clickable elements and scroll info
+		elements_text = state.element_tree.clickable_elements_to_string(
+			include_attributes=self.include_attributes
 		)
-		self.past_states.append(model_output.current_state.model_dump())
+
+		# Only add cut-off message if there are pixels above or below viewport
+		has_content_above = (state.pixels_above or 0) > 0
+		has_content_below = (state.pixels_below or 0) > 0
+
+		if elements_text != '':
+			if has_content_above:
+				elements_text = f'... {state.pixels_above} pixels above - scroll or extract content to see more ...\n{elements_text}'
+			if has_content_below:
+				elements_text = f'{elements_text}\n... {state.pixels_below} pixels below - scroll or extract content to see more ...'
+		else:
+			elements_text = 'empty page'
+
+		# Basic state description
+		state_description = f"""
+{step_info_description}
+Current url: {state.url}
+Available tabs:
+{state.tabs}
+Interactive elements from current page view:
+{elements_text}
+		"""
+
+		return state_description
+
+	def add_interaction(
+		self, model_output: AgentOutput, results: Optional[List[ActionResult]] = None
+	):
+		"""Add a new interaction to the history"""
+		self.tool_call_id += 1
+		self.past_steps.append((model_output, results or []))

@@ -28,7 +28,7 @@ from regex import D
 from browser_use.agent.message_manager.service import MessageManager
 from browser_use.agent.planning_manager.service import PlanningManager
 from browser_use.agent.planning_manager.views import TaskPlan
-from browser_use.agent.prompts import AgentMessagePrompt, SystemPrompt
+from browser_use.agent.prompts import SystemPrompt
 from browser_use.agent.views import (
 	ActionResult,
 	AgentError,
@@ -200,13 +200,16 @@ class Agent:
 		try:
 			state = await self.browser_context.get_state(use_vision=self.use_vision)
 
-			input_messages = self.message_manager.get_messages(
-				state, self._last_result, step_info=step_info
+			input_messages = await self.message_manager.get_messages(
+				state=state,
+				current_results=self._last_result,
+				step_info=step_info,
+				browser_context=self.browser_context,
 			)
 			try:
 				model_output = await self.get_next_action(input_messages)
 				self._save_conversation(input_messages, model_output)
-				self.message_manager.set_last_output(model_output)
+
 			except Exception as e:
 				# model call failed, remove last state message from history
 				raise e
@@ -214,6 +217,8 @@ class Agent:
 			result: list[ActionResult] = await self.controller.multi_act(
 				model_output.action, self.browser_context
 			)
+			# Update message manager with the new interaction
+			self.message_manager.add_interaction(model_output, results=result)
 			self._last_result = result
 
 			if len(result) > 0 and result[-1].is_done:
@@ -261,11 +266,7 @@ class Agent:
 			logger.error(f'{prefix}{error_msg}')
 			if 'Max token limit reached' in error_msg:
 				# cut tokens from history
-				self.message_manager.max_input_tokens = self.max_input_tokens - 500
-				logger.info(
-					f'Cutting tokens from history - new max input tokens: {self.message_manager.max_input_tokens}'
-				)
-				self.message_manager.cut_messages()
+				logger.info('Token limit reached - continuing with reduced history')
 			elif 'Could not parse response' in error_msg:
 				# give model a hint how output should look like
 				error_msg += '\n\nReturn a valid JSON object with the required fields.'
@@ -543,13 +544,13 @@ class Agent:
 
 		if self.browser_context.session:
 			state = await self.browser_context.get_state(use_vision=self.use_vision)
-			content = AgentMessagePrompt(
-				state=state,
-				result=self._last_result,
-				include_attributes=self.include_attributes,
-				max_error_length=self.max_error_length,
+			input_messages = await self.message_manager.get_messages(
+				state=state, current_results=self._last_result, browser_context=self.browser_context
 			)
-			msg = [SystemMessage(content=system_msg), content.get_user_message()]
+			msg = [
+				SystemMessage(content=system_msg),
+				input_messages[-1],
+			]  # Use last message which has state
 		else:
 			# if no browser session, we can't validate the output
 			return True

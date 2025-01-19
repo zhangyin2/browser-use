@@ -4,7 +4,7 @@ from typing import Any, Optional
 from pydantic import BaseModel
 
 from browser_use.dom.history_tree_processor.service import DOMHistoryElement
-from browser_use.dom.views import DOMState
+from browser_use.dom.views import DOMElementNode, DOMState, SelectorMap
 
 
 # Pydantic
@@ -18,9 +18,13 @@ class TabInfo(BaseModel):
 
 @dataclass
 class BrowserState(DOMState):
+	element_tree: DOMElementNode
+	selector_map: SelectorMap
 	url: str
 	title: str
 	tabs: list[TabInfo]
+	pixels_above: Optional[int] = None  # Pixels above viewport
+	pixels_below: Optional[int] = None  # Pixels below viewport
 	screenshot: Optional[str] = None
 
 
@@ -29,7 +33,7 @@ class BrowserStateHistory:
 	url: str
 	title: str
 	tabs: list[TabInfo]
-	interacted_element: list[DOMHistoryElement | None] | list[None]
+	interacted_element: list[Optional[DOMElementNode]]
 	screenshot: Optional[str] = None
 
 	def to_dict(self) -> dict[str, Any]:
