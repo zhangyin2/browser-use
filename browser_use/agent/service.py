@@ -93,6 +93,7 @@ class Agent:
 		max_actions_per_step: int = 10,
 		plan_task: bool = False,
 		tool_calling_method: Optional[str] = 'auto',
+		max_num_of_msg_in_history: int = 10,
 	):
 		self.agent_id = str(uuid.uuid4())  # unique identifier for the agent
 
@@ -144,16 +145,16 @@ class Agent:
 		# Add planning step
 		if self.plan_task:
 			self.task = self._plan_task()
-
+		self.max_num_of_msg_in_history = max_num_of_msg_in_history
 		self.message_manager = MessageManager(
-			llm=self.llm,
 			task=self.task,
 			action_descriptions=self.controller.registry.get_prompt_description(),
 			system_prompt_class=self.system_prompt_class,
-			max_input_tokens=self.max_input_tokens,
 			include_attributes=self.include_attributes,
 			max_error_length=self.max_error_length,
 			max_actions_per_step=self.max_actions_per_step,
+			max_num_of_msg_in_history=self.max_num_of_msg_in_history,
+			use_vision=self.use_vision,
 		)
 
 		# Tracking variables
@@ -204,7 +205,6 @@ class Agent:
 				state=state,
 				current_results=self._last_result,
 				step_info=step_info,
-				browser_context=self.browser_context,
 			)
 			try:
 				model_output = await self.get_next_action(input_messages)
@@ -545,7 +545,7 @@ class Agent:
 		if self.browser_context.session:
 			state = await self.browser_context.get_state(use_vision=self.use_vision)
 			input_messages = await self.message_manager.get_messages(
-				state=state, current_results=self._last_result, browser_context=self.browser_context
+				state=state, current_results=self._last_result
 			)
 			msg = [
 				SystemMessage(content=system_msg),
@@ -637,7 +637,7 @@ class Agent:
 	) -> list[ActionResult]:
 		"""Execute a single step from history with element validation"""
 
-		state = await self.browser_context.get_state()
+		state = await self.browser_context.get_state(use_vision=self.use_vision)
 		if not state or not history_item.model_output:
 			raise ValueError('Invalid state or model output')
 		updated_actions = []

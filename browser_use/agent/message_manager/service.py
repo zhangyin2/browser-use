@@ -29,20 +29,20 @@ logger = logging.getLogger(__name__)
 class MessageManager:
 	def __init__(
 		self,
-		llm: BaseChatModel,
 		task: str,
 		action_descriptions: str,
 		system_prompt_class: Type[SystemPrompt],
 		include_attributes: list[str] = [],
-		max_error_length: int = 400,
-		max_actions_per_step: int = 10,
+		max_error_length: int = 200,
+		max_num_of_msg_in_history: int = 10,
 		use_vision: bool = True,
+		max_actions_per_step: int = 10,
 	):
-		self.llm = llm
-		self.use_vision = use_vision
 		self.task = task
 		self.include_attributes = include_attributes
 		self.max_error_length = max_error_length
+		self.max_num_of_msg_in_history = max_num_of_msg_in_history
+		self.use_vision = use_vision
 
 		# Initialize system prompt
 		self.system_prompt = system_prompt_class(
@@ -81,55 +81,112 @@ class MessageManager:
 		state: BrowserState,
 		current_results: Optional[List[ActionResult]] = None,
 		step_info: Optional[AgentStepInfo] = None,
-		browser_context: Optional[BrowserContext] = None,
 	) -> list[BaseMessage]:
 		"""Get all messages for the next model call"""
 		messages = []
+		logger.debug('Building message sequence...')
 
 		# 1. System message
 		messages.append(self.system_message)
+		logger.debug('Added system message')
 
 		# 2. Task message
 		messages.append(self.task_message)
+		logger.debug('Added task message')
 
-		# 3. Past steps with their results
-		for i, (output, results) in enumerate(self.past_steps, 1):
-			# Add step state
-			step_msg = f'Step {i} state:\n'
-			step_msg += f'Evaluation: {output.current_state.evaluation_previous_goal}\n'
-			step_msg += f'Memory: {output.current_state.memory}\n'
-			step_msg += f'Goal: {output.current_state.next_goal}\n'
+		# 3. Past steps with their results (limited by max_num_of_msg_in_history)
+		recent_steps = self.past_steps[-self.max_num_of_msg_in_history :] if self.past_steps else []
+		logger.debug(f'Processing {len(recent_steps)} recent steps')
 
-			# Add results that should be kept in memory
-			memory_results = [r for r in results if r.include_in_memory]
-			if memory_results:
-				step_msg += self._format_results(memory_results)
-
-			messages.append(HumanMessage(content=step_msg))
+		# If no past steps, add a placeholder tool call and response
+		if not recent_steps:
+			logger.debug('No past steps, adding placeholder tool call')
 			messages.append(
 				AIMessage(
 					content='',
 					tool_calls=[
 						{
 							'name': 'AgentOutput',
-							'args': output.model_dump(exclude_none=True),
-							'id': str(self.tool_call_id + i),
+							'args': {
+								'current_state': {
+									'evaluation_previous_goal': 'Success - First step',
+									'memory': 'Starting new task - need to break down goal into subtasks',
+									'next_goal': 'Start with the first subtask',
+									'todo_subtasks': 'Break down goal into subtasks',
+									'completed_subtask': 'None',
+									'confidence': 90,
+								}
+							},
+							'id': '1',
 							'type': 'tool_call',
 						}
 					],
 				)
 			)
 
-		# Add current results if any
-		if current_results:
-			result_msg = self._format_results(current_results)
-			if result_msg:
+			# Combine initial response and current results into a single tool message
+			response_content = 'Starting new task'
+			if current_results:
+				result_msg = self._format_results(current_results)
+				if result_msg:
+					response_content += result_msg
+
+			messages.append(
+				ToolMessage(
+					content=response_content,
+					tool_call_id='1',
+				)
+			)
+			last_tool_call_id = '1'
+			logger.debug('Added placeholder tool call and combined response')
+		else:
+			last_tool_call_id = None
+			for i, (output, results) in enumerate(recent_steps):
+				current_id = str(i + 1)
+				logger.debug(f'Processing step {i + 1} with tool call ID {current_id}')
+
+				# Add step state
+				step_msg = f'Step {i + 1} state:\n'
+				step_msg += f'{output.current_state.model_dump_json(indent=2)}\n'
+
+				messages.append(HumanMessage(content=step_msg))
+
+				# Add tool call
 				messages.append(
-					ToolMessage(content=result_msg, tool_call_id=str(self.tool_call_id))
+					AIMessage(
+						content='',
+						tool_calls=[
+							{
+								'name': 'AgentOutput',
+								'args': output.model_dump(exclude_none=True),
+								'id': current_id,
+								'type': 'tool_call',
+							}
+						],
+					)
 				)
 
+				# Combine memory results and current results into a single tool message
+				response_content = 'No results'
+				memory_results = [r for r in results if r.include_in_memory]
+				if memory_results:
+					response_content = self._format_results(memory_results)
+
+				# Add current results if this is the last step
+				if current_results and i == len(recent_steps) - 1:
+					result_msg = self._format_results(current_results)
+					if result_msg:
+						if response_content == 'No results':
+							response_content = result_msg
+						else:
+							response_content += result_msg
+
+				messages.append(ToolMessage(content=response_content, tool_call_id=current_id))
+				last_tool_call_id = current_id
+				logger.debug(f'Added step {i + 1} messages with combined response')
+
 		# 4. Current state with scroll info
-		state_msg = await self._get_state_description(state, step_info, browser_context)
+		state_msg = await self._get_state_description(state, step_info)
 		human_msg = (
 			'This is the current page, give me the next action to reach my ultimate goal: \n'
 			+ state_msg
@@ -149,6 +206,15 @@ class MessageManager:
 			)
 		else:
 			messages.append(HumanMessage(content=human_msg))
+
+		# Debug log the entire message sequence
+		logger.debug('Final message sequence:')
+		for i, msg in enumerate(messages):
+			logger.debug(f'  {i}: {msg.__class__.__name__}')
+			if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls'):
+				logger.debug(f'    tool_calls: {msg.tool_calls}')
+			if isinstance(msg, ToolMessage):
+				logger.debug(f'    tool_call_id: {msg.tool_call_id}')
 
 		return messages
 
