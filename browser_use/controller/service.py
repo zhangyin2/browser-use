@@ -1,7 +1,10 @@
 import asyncio
 import json
 import logging
+import os
+from typing import Optional
 
+from langchain_core.language_models.chat_models import BaseChatModel
 from main_content_extractor import MainContentExtractor
 from playwright.async_api import Page
 
@@ -18,10 +21,14 @@ class Controller:
 	def __init__(
 		self,
 		exclude_actions: list[str] = [],
+		llm: Optional[BaseChatModel] = None,
 	):
 		self.exclude_actions = exclude_actions
 		self.registry = Registry(self.exclude_actions)
 		self._register_default_actions()
+
+		self.llm = llm
+		logger.info(f'Registered LLM: {llm}')
 
 	def _register_default_actions(self):
 		"""Register all default browser actions"""
@@ -145,19 +152,34 @@ class Controller:
 
 		# Content Actions
 		@self.registry.action(
-			'Extract page content to get the text or markdown with links if include_links is set to true',
+			'Extract specific content from the current entire page, like all names, the first 10 links, specific company information or summarise the page. This tool calls a sub agent with your query. Describe everything you want from the page.',
 			requires_browser=True,
 		)
-		async def extract_content(include_links: bool, browser: BrowserContext):
+		async def extract_content(query: str, include_links: bool, browser: BrowserContext):
 			page = await browser.get_current_page()
-			output_format = 'markdown' if include_links else 'text'
+
 			html = await page.content()
+			output_format = 'markdown' if include_links else 'text'
 			content = MainContentExtractor.extract(  # type: ignore
 				html=html,
 				output_format=output_format,
 			)
-			msg = f'📄  Extracted page as {output_format}\n: {content}\n'
-			logger.info(msg)
+
+			if self.llm:
+				# use scrapergraphAI
+				llm = self.llm
+				# call llm with query and page
+				task = f"""You are a content extractor. You get a query and content and you should return from the content everything what you are asked for in json format. Include everything you can find. 
+				Query: {query}
+				Content: {content}
+				"""
+				result = llm.invoke(task)
+				msg = f'📄  Extracted from page \n: {result.content}\n'
+				logger.info(msg)
+				return ActionResult(extracted_content=msg, include_in_memory=True)
+			else:
+				msg = f'📄  Extracted page as {output_format}\n: {content}\n'
+				logger.info(msg)
 			return ActionResult(extracted_content=msg)
 
 		@self.registry.action('Complete task', param_model=DoneAction)
