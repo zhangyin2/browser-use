@@ -2,6 +2,7 @@ import logging
 from importlib import resources
 from typing import Optional
 
+from memory_profiler import profile
 from playwright.async_api import Page
 
 from browser_use.dom.views import (
@@ -21,6 +22,7 @@ class DomService:
 		self.xpath_cache = {}
 
 	# region - Clickable elements
+
 	async def get_clickable_elements(
 		self,
 		highlight_elements: bool = True,
@@ -32,6 +34,7 @@ class DomService:
 
 		return DOMState(element_tree=element_tree, selector_map=selector_map)
 
+	@profile
 	async def _build_dom_tree(
 		self,
 		highlight_elements: bool,

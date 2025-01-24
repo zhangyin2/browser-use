@@ -109,7 +109,7 @@ class AgentManager:
 			try:
 				llm = ChatOpenAI(model='gpt-4o-mini')
 				agent = {
-					'instance': Agent(task=task, llm=llm),
+					'instance': Agent(task=task, llm=llm, generate_gif=False),
 					'task': task,
 					'running': False,
 					'created_at': time.time(),

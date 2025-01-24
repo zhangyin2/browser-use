@@ -2,8 +2,10 @@ import asyncio
 import random
 
 import aiohttp
+from memory_profiler import profile
 
 
+@profile
 async def test_agent(session, agent_id, task):
 	# Start agent
 	async with session.post('http://localhost:8000/agent/run', json={'agent_id': f'agent_{agent_id}', 'task': task}) as response:
@@ -19,6 +21,7 @@ async def test_agent(session, agent_id, task):
 		await asyncio.sleep(2)
 
 
+@profile
 async def main():
 	tasks = [
 		'Search for Python programming tutorials',
@@ -36,7 +39,7 @@ async def main():
 
 	async with aiohttp.ClientSession() as session:
 		# Start 10 agents simultaneously
-		agent_tasks = [test_agent(session, i, tasks[i]) for i in range(50)]
+		agent_tasks = [test_agent(session, i, tasks[i]) for i in range(10)]
 		await asyncio.gather(*agent_tasks)
 
 

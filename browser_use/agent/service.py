@@ -20,6 +20,7 @@ from langchain_core.messages import (
 	SystemMessage,
 )
 from lmnr import observe
+from memory_profiler import profile
 from openai import RateLimitError
 from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel, ValidationError
@@ -218,6 +219,7 @@ class Agent:
 				return None
 
 	@time_execution_async('--step')
+	@profile
 	async def step(self, step_info: Optional[AgentStepInfo] = None) -> None:
 		"""Execute one step of the task"""
 		logger.info(f'\n📍 Step {self.n_steps}')
@@ -329,6 +331,7 @@ class Agent:
 		self.history.history.append(history_item)
 
 	@time_execution_async('--get_next_action')
+	@profile
 	async def get_next_action(self, input_messages: list[BaseMessage]) -> AgentOutput:
 		"""Get next action from LLM based on current state"""
 		if self.tool_calling_method is None:
@@ -421,6 +424,7 @@ class Agent:
 		)
 
 	@observe(name='agent.run')
+	@profile
 	async def run(self, max_steps: int = 100) -> AgentHistoryList:
 		"""Execute the task with maximum number of steps"""
 		try:
