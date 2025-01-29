@@ -23,7 +23,7 @@ agent = Agent(
 ### Required Parameters
 
 - `task`: The instruction for the agent to execute
-- `llm`: A LangChain chat model instance. See <a href="/customize/langchain-models">LangChain Models</a> for supported models.
+- `llm`: A LangChain chat model instance. See <a href="/customize/supported-models">LangChain Models</a> for supported models.
 
 ## Agent Behavior
 
@@ -87,7 +87,7 @@ await browser.close()
 
 ### Reuse Existing Browser Context
 
-`browser_context`: A Playwright browser context. Useful for maintaining persistent sessions. See <a href="/customize/persistent-browser">Persistent Browser</a> for more details.
+`browser_context`: A Playwright browser context. Useful for maintaining persistent sessions. See <a href="/customize/real-browser">Persistent Browser</a> for more details.
 
 ```python
 from browser_use import Agent, Browser
@@ -162,11 +162,11 @@ The `AgentHistoryList` provides many helper methods to analyze the execution:
   code](https://github.com/browser-use/browser-use/blob/main/browser_use/agent/views.py#L111).
 </Note>
 
-
-
 ## Run initial actions without LLM
+
 With [this example](https://github.com/browser-use/browser-use/blob/main/examples/features/initial_actions.py) you can run initial actions without the LLM.
 Specify the action as a dictionary where the key is the action name and the value is the action parameters. You can find all our actions in the [Controller](https://github.com/browser-use/browser-use/blob/main/browser_use/controller/service.py) source code.
+
 ```python
 
 initial_actions = [
@@ -181,4 +181,3 @@ agent = Agent(
 	llm=llm,
 )
 ```
-
