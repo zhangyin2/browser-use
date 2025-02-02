@@ -1,6 +1,7 @@
-from typing import Optional
+from typing import Optional, Union
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, validator
 
 
 # Action Input Models
@@ -37,6 +38,28 @@ class OpenTabAction(BaseModel):
 
 class ScrollAction(BaseModel):
 	amount: Optional[int] = None  # The number of pixels to scroll. If None, scroll down/up one page
+
+
+class FileUploadAction(BaseModel):
+	index: int
+	file_path: str  # Can be local path or S3 URL
+	wait_for_navigation: bool = False
+	timeout: Optional[int] = 30000  # 30 seconds default timeout
+
+	@validator('file_path')
+	def validate_file_path(cls, v):
+		# Check if it's an S3 URL
+		parsed = urlparse(v)
+		if parsed.scheme == 's3':
+			return v
+		elif parsed.scheme in ('http', 'https') and 's3' in parsed.netloc:
+			return v
+		elif parsed.scheme in ('', 'file'):
+			# Local file path
+			return v.replace('file://', '')
+		else:
+			# Assume local path if no scheme
+			return v
 
 
 class SendKeysAction(BaseModel):

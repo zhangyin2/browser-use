@@ -1,8 +1,13 @@
 import asyncio
 import json
 import logging
-from typing import Callable, Dict, Optional, Type
+import os
+import tempfile
+from typing import Any, Callable, Dict, Optional, Tuple, Type
+from urllib.parse import ParseResult, urlparse
 
+import boto3
+from botocore.exceptions import ClientError
 from langchain_core.prompts import PromptTemplate
 from pydantic import BaseModel
 
@@ -12,6 +17,7 @@ from browser_use.controller.registry.service import Registry
 from browser_use.controller.views import (
 	ClickElementAction,
 	DoneAction,
+	FileUploadAction,
 	GoToUrlAction,
 	InputTextAction,
 	NoParamsAction,
@@ -21,6 +27,7 @@ from browser_use.controller.views import (
 	SendKeysAction,
 	SwitchTabAction,
 )
+from browser_use.dom.views import DOMElementNode
 from browser_use.utils import time_execution_async, time_execution_sync
 
 logger = logging.getLogger(__name__)
@@ -32,9 +39,29 @@ class Controller:
 		self,
 		exclude_actions: list[str] = [],
 		output_model: Optional[Type[BaseModel]] = None,
+		user_id: Optional[str] = None,
+		user_file_root: Optional[str] = None,
+		s3_user_prefix: Optional[str] = None,
 	):
+		"""
+		Initialize the Controller with user-specific settings
+
+		Args:
+			exclude_actions: List of action names to exclude
+			output_model: Optional output model type
+			user_id: Unique identifier for the user, used for file isolation
+			user_file_root: Root directory for user's local files
+			s3_user_prefix: Prefix for user's S3 paths (e.g. 'users/{user_id}/')
+		"""
 		self.exclude_actions = exclude_actions
 		self.output_model = output_model
+		self.user_id = user_id or 'default'
+		self.user_file_root = user_file_root or os.path.join(tempfile.gettempdir(), 'browser_use', self.user_id)
+		self.s3_user_prefix = s3_user_prefix or f'users/{self.user_id}/'
+
+		# Ensure user directory exists
+		os.makedirs(self.user_file_root, exist_ok=True)
+
 		self.registry = Registry(exclude_actions)
 		self._register_default_actions()
 
@@ -432,6 +459,83 @@ class Controller:
 				logger.error(msg)
 				return ActionResult(error=msg, include_in_memory=True)
 
+		@self.registry.action(
+			'Upload a file to a file input element. Provide the element index and file path (supports both local files and S3 URLs).',
+			param_model=FileUploadAction,
+		)
+		async def upload_file(params: FileUploadAction, browser: BrowserContext) -> ActionResult:
+			"""
+			Upload a file to a file input element.
+			Supports both local files and S3 URLs with user isolation.
+			"""
+			try:
+				session = await browser.get_session()
+				state = session.cached_state
+
+				if params.index not in state.selector_map:
+					return ActionResult(
+						error=f'Element with index {params.index} does not exist - retry or use alternative actions'
+					)
+
+				element_node = state.selector_map[params.index]
+
+				# Get and validate file upload element
+				file_upload_element, error = self._get_file_upload_element(element_node, params.index)
+				if error or file_upload_element is None:
+					return ActionResult(error=error or 'Failed to get file upload element')
+
+				# Get the actual element locator
+				file_upload_locator = await browser.get_locate_element(file_upload_element)
+				if file_upload_locator is None:
+					return ActionResult(error=f'Could not locate file input element for index {params.index}')
+
+				# Handle file path - could be local or S3
+				parsed_path = urlparse(params.file_path)
+				temp_file_path = None
+
+				try:
+					if parsed_path.scheme in ('s3', 'http', 'https') and (
+						's3' in parsed_path.netloc or parsed_path.scheme == 's3'
+					):
+						# Handle S3 URL
+						temp_file_path, error = await self._get_s3_file(parsed_path, params.file_path)
+						if error or temp_file_path is None:
+							return ActionResult(error=error or 'Failed to download S3 file')
+						file_path_to_use = temp_file_path
+					else:
+						# Handle local file
+						file_path_to_use, error = self._validate_local_file(params.file_path)
+						if error:
+							return ActionResult(error=error)
+
+					# Perform the upload
+					success, error = await self._perform_file_upload(
+						file_upload_locator,
+						file_path_to_use,
+						params.wait_for_navigation,
+						params.timeout or 30000,  # Use default timeout if None
+						browser,
+					)
+
+					if not success:
+						return ActionResult(error=error)
+
+					msg = f'📎 Successfully uploaded file {os.path.basename(params.file_path)} to element {params.index}'
+					logger.info(msg)
+					return ActionResult(extracted_content=msg, include_in_memory=True)
+
+				finally:
+					# Clean up temporary file if it was created
+					if temp_file_path and os.path.exists(temp_file_path):
+						try:
+							os.unlink(temp_file_path)
+						except Exception as e:
+							logger.warning(f'Failed to clean up temporary file: {str(e)}')
+
+			except Exception as e:
+				logger.error(f'Unexpected error during file upload: {str(e)}')
+				return ActionResult(error=f'Unexpected error during file upload: {str(e)}')
+
 	def action(self, description: str, **kwargs):
 		"""Decorator for registering custom actions
 
@@ -515,3 +619,95 @@ class Controller:
 			return ActionResult()
 		except Exception as e:
 			raise e
+
+	def _get_file_upload_element(
+		self, element_node: DOMElementNode, index: int
+	) -> Tuple[Optional[DOMElementNode], Optional[str]]:
+		"""Get the file upload element and validate it exists."""
+		file_upload_element = element_node.get_file_upload_element()
+
+		if file_upload_element is None:
+			logger.debug(f'No file input found for index {index}')
+			return None, f'No file input element found at or near index {index}. Make sure you selected the correct element.'
+
+		return file_upload_element, None
+
+	async def _get_s3_file(self, parsed_path: ParseResult, original_path: str) -> Tuple[Optional[str], Optional[str]]:
+		"""
+		Download file from S3 with user isolation.
+		Returns (local_file_path, error_message)
+		"""
+		try:
+			s3_client = boto3.client('s3')
+
+			# Parse bucket and key from URL
+			if parsed_path.scheme == 's3':
+				bucket = parsed_path.netloc
+				key = parsed_path.path.lstrip('/')
+			else:
+				# Handle https://bucket.s3.region.amazonaws.com/key format
+				bucket = parsed_path.netloc.split('.')[0]
+				key = parsed_path.path.lstrip('/')
+
+			# Validate user has access to this path
+			if not key.startswith(self.s3_user_prefix):
+				return None, f"Access denied: File {original_path} is not in user's S3 directory"
+
+			# Create a temporary file in user's directory
+			temp_file = tempfile.NamedTemporaryFile(dir=self.user_file_root, delete=False, prefix='s3_download_')
+
+			try:
+				s3_client.download_file(bucket, key, temp_file.name)
+				logger.debug(f'Successfully downloaded S3 file from {original_path}')
+				return temp_file.name, None
+			except ClientError as e:
+				return None, f'Failed to download file from S3: {str(e)}'
+
+		except Exception as e:
+			return None, f'Unexpected error downloading S3 file: {str(e)}'
+
+	def _validate_local_file(self, file_path: str) -> Tuple[str, Optional[str]]:
+		"""
+		Validate local file exists and is in user's directory.
+		Returns (validated_path, error_message)
+		"""
+		# Convert to absolute path
+		abs_path = os.path.abspath(file_path)
+
+		# Check if file is in user's directory
+		if not abs_path.startswith(self.user_file_root):
+			# If not in user directory, copy it there
+			filename = os.path.basename(abs_path)
+			new_path = os.path.join(self.user_file_root, filename)
+			try:
+				if os.path.exists(abs_path):
+					import shutil
+
+					shutil.copy2(abs_path, new_path)
+					return new_path, None
+				else:
+					return abs_path, f'Local file not found: {file_path}'
+			except Exception as e:
+				return abs_path, f'Error copying file to user directory: {str(e)}'
+
+		return abs_path, None
+
+	async def _perform_file_upload(
+		self, file_upload_locator: Any, file_path: str, wait_for_navigation: bool, timeout: int, browser: BrowserContext
+	) -> Tuple[bool, Optional[str]]:
+		"""
+		Perform the actual file upload.
+		Returns (success, error_message)
+		"""
+		try:
+			if wait_for_navigation:
+				page = await browser.get_current_page()
+				async with page.expect_navigation(timeout=timeout):
+					await file_upload_locator.set_input_files(file_path)
+			else:
+				await file_upload_locator.set_input_files(file_path)
+			return True, None
+		except Exception as e:
+			error_msg = f'Failed to upload file. Error: {str(e)}. Make sure the file format is supported and the element accepts file uploads.'
+			logger.error(error_msg)
+			return False, error_msg
