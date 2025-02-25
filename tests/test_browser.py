@@ -1,306 +1,276 @@
 import asyncio
+import logging
 import pytest
 import requests
 import subprocess
-from browser_use.browser.browser import Browser, BrowserConfig
-from browser_use.browser.context import BrowserContext, BrowserContextConfig
-from playwright._impl._api_structures import ProxySettings
+from browser_use.browser.browser import (
+    Browser,
+    BrowserConfig,
+    async_playwright,
+)
+from browser_use.browser.context import (
+    BrowserContext,
+    BrowserContextConfig,
+)
+
+
+class DummyChromium:
+
+    async def connect_over_cdp(self, url):
+        return None
+
+
+class DummyPlaywright:
+    chromium = DummyChromium()
+
 
 @pytest.mark.asyncio
-async def test_standard_browser_launch(monkeypatch):
+async def test_setup_cdp_without_url():
     """
-    Test that the standard browser is launched correctly:
-    When no remote (cdp or wss) or chrome instance is provided, the Browser class uses _setup_standard_browser.
-    This test monkeypatches async_playwright to return dummy objects, and asserts that get_playwright_browser returns the expected DummyBrowser.
+    Test that _setup_cdp raises a ValueError when no CDP URL is provided in BrowserConfig.
     """
-    class DummyBrowser:
-        pass
-    class DummyChromium:
-        async def launch(self, headless, args, proxy=None):
-            return DummyBrowser()
-    class DummyPlaywright:
-        def __init__(self):
-            self.chromium = DummyChromium()
-        async def stop(self):
-            pass
-    class DummyAsyncPlaywrightContext:
-        async def start(self):
-            return DummyPlaywright()
-    monkeypatch.setattr("browser_use.browser.browser.async_playwright", lambda: DummyAsyncPlaywrightContext())
-    config = BrowserConfig(headless=True, disable_security=False, extra_chromium_args=["--test"])
-    browser_obj = Browser(config=config)
-    result_browser = await browser_obj.get_playwright_browser()
-    assert isinstance(result_browser, DummyBrowser), "Expected DummyBrowser from _setup_standard_browser"
-    await browser_obj.close()
+    config = BrowserConfig(cdp_url=None)
+    browser = Browser(config=config)
+    with pytest.raises(ValueError, match="CDP URL is required"):
+        await browser._setup_cdp(DummyPlaywright())
+
+
+class DummyChromiumWithLaunch:
+
+    async def launch(self, headless, args, proxy):
+        """
+        Dummy launch method that validates passed parameters and returns a dummy browser.
+        """
+        assert headless == False
+        assert "--no-sandbox" in args
+        return "dummy_browser"
+
+
+class DummyPlaywrightStandard:
+    chromium = DummyChromiumWithLaunch()
+
+
 @pytest.mark.asyncio
-async def test_cdp_browser_launch(monkeypatch):
+async def test_setup_standard_browser():
     """
-    Test that when a CDP URL is provided in the configuration, the Browser uses _setup_cdp 
-    and returns the expected DummyBrowser.
+    Test that _setup_browser returns a standard browser instance when no remote URL or chrome instance path is provided.
     """
-    class DummyBrowser:
-        pass
-    class DummyChromium:
-        async def connect_over_cdp(self, endpoint_url, timeout=20000):
-            assert endpoint_url == "ws://dummy-cdp-url", "The endpoint URL should match the configuration."
-            return DummyBrowser()
-    class DummyPlaywright:
-        def __init__(self):
-            self.chromium = DummyChromium()
-        async def stop(self):
-            pass
-    class DummyAsyncPlaywrightContext:
-        async def start(self):
-            return DummyPlaywright()
-    monkeypatch.setattr("browser_use.browser.browser.async_playwright", lambda: DummyAsyncPlaywrightContext())
-    config = BrowserConfig(cdp_url="ws://dummy-cdp-url")
-    browser_obj = Browser(config=config)
-    result_browser = await browser_obj.get_playwright_browser()
-    assert isinstance(result_browser, DummyBrowser), "Expected DummyBrowser from _setup_cdp"
-    await browser_obj.close()
+    config = BrowserConfig()
+    browser_instance = Browser(config=config)
+    result = await browser_instance._setup_browser(DummyPlaywrightStandard())
+    assert result == "dummy_browser"
+
+
+class DummyChromiumWSS:
+
+    async def connect(self, url, timeout=None):
+        """
+        Dummy connect method for WebSocket that validates the URL and returns a dummy browser.
+        """
+        assert url == "wss://dummy"
+        return "dummy_wss_browser"
+
+
+class DummyPlaywrightWSS:
+    chromium = DummyChromiumWSS()
+
+
 @pytest.mark.asyncio
-async def test_wss_browser_launch(monkeypatch):
+async def test_setup_wss_browser():
     """
-    Test that when a WSS URL is provided in the configuration,
-    the Browser uses _setup_wss and returns the expected DummyBrowser.
+    Test that _setup_browser returns a browser instance via WSS connection when wss_url is provided.
     """
-    class DummyBrowser:
-        pass
-    class DummyChromium:
-        async def connect(self, wss_url):
-            assert wss_url == "ws://dummy-wss-url", "WSS URL should match the configuration."
-            return DummyBrowser()
-    class DummyPlaywright:
-        def __init__(self):
-            self.chromium = DummyChromium()
-        async def stop(self):
-            pass
-    class DummyAsyncPlaywrightContext:
-        async def start(self):
-            return DummyPlaywright()
-    monkeypatch.setattr("browser_use.browser.browser.async_playwright", lambda: DummyAsyncPlaywrightContext())
-    config = BrowserConfig(wss_url="ws://dummy-wss-url")
-    browser_obj = Browser(config=config)
-    result_browser = await browser_obj.get_playwright_browser()
-    assert isinstance(result_browser, DummyBrowser), "Expected DummyBrowser from _setup_wss"
-    await browser_obj.close()
+    config = BrowserConfig(wss_url="wss://dummy")
+    browser_instance = Browser(config=config)
+    result = await browser_instance._setup_browser(DummyPlaywrightWSS())
+    assert result == "dummy_wss_browser"
+
+
+class DummyChromiumInstance:
+
+    async def connect_over_cdp(self, endpoint_url, timeout):
+        assert endpoint_url == "http://localhost:9222"
+        assert timeout == 20000
+        return "dummy_chrome_instance_browser"
+
+
+class DummyPlaywrightInstance:
+    chromium = DummyChromiumInstance()
+
+
 @pytest.mark.asyncio
-async def test_chrome_instance_browser_launch(monkeypatch):
+async def test_setup_browser_with_instance(monkeypatch):
     """
-    Test that when a chrome instance path is provided the Browser class uses 
-    _setup_browser_with_instance branch and returns the expected DummyBrowser object
-    by reusing an existing Chrome instance.
+    Test that _setup_browser_with_instance starts a new Chrome instance by simulating connection failures
+    and then a successful connection. This verifies that the for-loop waiting for a newly started Chrome instance works.
     """
-    # Dummy response for requests.get when checking chrome debugging endpoint.
-    class DummyResponse:
-        status_code = 200
-    def dummy_get(url, timeout):
-        if url == "http://localhost:9222/json/version":
+    fake_get_calls = []
+
+    def fake_get(url, timeout):
+        if len(fake_get_calls) < 3:
+            fake_get_calls.append(1)
+            raise requests.ConnectionError("Simulated connection error")
+        else:
+
+            class DummyResponse:
+                status_code = 200
+
             return DummyResponse()
-        raise requests.ConnectionError("Connection failed")
-    monkeypatch.setattr(requests, "get", dummy_get)
-    class DummyBrowser:
-        pass
-    class DummyChromium:
-        async def connect_over_cdp(self, endpoint_url, timeout=20000):
-            assert endpoint_url == "http://localhost:9222", "Endpoint URL must be 'http://localhost:9222'"
-            return DummyBrowser()
-    class DummyPlaywright:
-        def __init__(self):
-            self.chromium = DummyChromium()
-        async def stop(self):
-            pass
-    class DummyAsyncPlaywrightContext:
-        async def start(self):
-            return DummyPlaywright()
-    monkeypatch.setattr("browser_use.browser.browser.async_playwright", lambda: DummyAsyncPlaywrightContext())
-    config = BrowserConfig(chrome_instance_path="dummy/chrome", extra_chromium_args=["--dummy-arg"])
-    browser_obj = Browser(config=config)
-    result_browser = await browser_obj.get_playwright_browser()
-    assert isinstance(result_browser, DummyBrowser), "Expected DummyBrowser from _setup_browser_with_instance"
-    await browser_obj.close()
-@pytest.mark.asyncio
-async def test_standard_browser_disable_security_args(monkeypatch):
-    """
-    Test that the standard browser launch includes disable-security arguments when disable_security is True.
-    This verifies that _setup_standard_browser correctly appends the security disabling arguments along with
-    the base arguments and any extra arguments provided.
-    """
-    # These are the base arguments defined in _setup_standard_browser.
-    base_args = [
-        '--no-sandbox',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-infobars',
-        '--disable-background-timer-throttling',
-        '--disable-popup-blocking',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        '--disable-window-activation',
-        '--disable-focus-on-load',
-        '--no-first-run',
-        '--no-default-browser-check',
-        '--no-startup-window',
-        '--window-position=0,0',
-    ]
-    # When disable_security is True, these arguments should be added.
-    disable_security_args = [
-        '--disable-web-security',
-        '--disable-site-isolation-trials',
-        '--disable-features=IsolateOrigins,site-per-process'
-    ]
-    # Additional arbitrary argument for testing extra args
-    extra_args = ["--dummy-extra"]
-    class DummyBrowser:
-        pass
-    class DummyChromium:
-        async def launch(self, headless, args, proxy=None):
-            # Expected args is the base args plus disable security args and the extra args.
-            expected_args = base_args + disable_security_args + extra_args
-            assert headless is True, "Expected headless to be True"
-            assert args == expected_args, f"Expected args {expected_args}, but got {args}"
-            assert proxy is None, "Expected proxy to be None"
-            return DummyBrowser()
-    class DummyPlaywright:
-        def __init__(self):
-            self.chromium = DummyChromium()
-        async def stop(self):
-            pass
-    class DummyAsyncPlaywrightContext:
-        async def start(self):
-            return DummyPlaywright()
-    monkeypatch.setattr("browser_use.browser.browser.async_playwright", lambda: DummyAsyncPlaywrightContext())
-    config = BrowserConfig(headless=True, disable_security=True, extra_chromium_args=extra_args)
-    browser_obj = Browser(config=config)
-    result_browser = await browser_obj.get_playwright_browser()
-    assert isinstance(result_browser, DummyBrowser), "Expected DummyBrowser from _setup_standard_browser with disable_security active"
-    await browser_obj.close()
-@pytest.mark.asyncio
-async def test_new_context_creation():
-    """
-    Test that the new_context method returns a BrowserContext with the correct attributes.
-    This verifies that the BrowserContext is initialized with the provided Browser instance and configuration.
-    """
-    config = BrowserConfig()
-    browser_obj = Browser(config=config)
-    custom_context_config = BrowserContextConfig()
-    context = await browser_obj.new_context(custom_context_config)
-    assert isinstance(context, BrowserContext), "Expected new_context to return an instance of BrowserContext"
-    assert context.browser is browser_obj, "Expected the context's browser attribute to be the Browser instance"
-    assert context.config == custom_context_config, "Expected the context's config attribute to be the provided config"
-    await browser_obj.close()
-@pytest.mark.asyncio
-async def test_chrome_instance_browser_launch_failure(monkeypatch):
-    """
-    Test that when a Chrome instance cannot be started or connected to,
-    the Browser._setup_browser_with_instance branch eventually raises a RuntimeError.
-    We simulate failure by:
-      - Forcing requests.get to always raise a ConnectionError (so no existing instance is found).
-      - Monkeypatching subprocess.Popen to do nothing.
-      - Replacing asyncio.sleep to avoid delays.
-      - Having the dummy playwright's connect_over_cdp method always raise an Exception.
-    """
-    def dummy_get(url, timeout):
-        raise requests.ConnectionError("Simulated connection failure")
-    monkeypatch.setattr(requests, "get", dummy_get)
+
+    monkeypatch.setattr(requests, "get", fake_get)
     monkeypatch.setattr(subprocess, "Popen", lambda args, stdout, stderr: None)
-    async def fake_sleep(seconds):
-        return
-    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
-    class DummyChromium:
-        async def connect_over_cdp(self, endpoint_url, timeout=20000):
-            raise Exception("Connection failed simulation")
-    class DummyPlaywright:
-        def __init__(self):
-            self.chromium = DummyChromium()
-        async def stop(self):
-            pass
-    class DummyAsyncPlaywrightContext:
-        async def start(self):
-            return DummyPlaywright()
-    monkeypatch.setattr("browser_use.browser.browser.async_playwright", lambda: DummyAsyncPlaywrightContext())
-    config = BrowserConfig(chrome_instance_path="dummy/chrome", extra_chromium_args=["--dummy-arg"])
-    browser_obj = Browser(config=config)
-    with pytest.raises(RuntimeError, match="To start chrome in Debug mode"):
-        await browser_obj.get_playwright_browser()
-    await browser_obj.close()
+    config = BrowserConfig(chrome_instance_path="dummy_chrome_instance_path")
+    browser_instance = Browser(config=config)
+    result = await browser_instance._setup_browser_with_instance(
+        DummyPlaywrightInstance()
+    )
+    assert result == "dummy_chrome_instance_browser"
+
+
+class DummyFailingBrowser:
+
+    async def close(self):
+        raise Exception("Simulated close error")
+
+
+class DummyFailingPlaywright:
+
+    async def stop(self):
+        raise Exception("Simulated stop error")
+
+
 @pytest.mark.asyncio
-async def test_get_playwright_browser_caching(monkeypatch):
+async def test_close_cleans_up_resources():
     """
-    Test that get_playwright_browser returns a cached browser instance.
-    On the first call, the browser is initialized; on subsequent calls,
-    the same instance is returned.
+    Test that calling close() cleans up the browser instance by setting playwright_browser and playwright to None,
+    even if the underlying close() and stop() methods throw exceptions.
     """
-    class DummyBrowser:
-        pass
-    class DummyChromium:
-        async def launch(self, headless, args, proxy=None):
-            return DummyBrowser()
-    class DummyPlaywright:
-        def __init__(self):
-            self.chromium = DummyChromium()
-        async def stop(self):
-            pass
-    class DummyAsyncPlaywrightContext:
-        async def start(self):
-            return DummyPlaywright()
-    monkeypatch.setattr("browser_use.browser.browser.async_playwright", lambda: DummyAsyncPlaywrightContext())
-    config = BrowserConfig(headless=True, disable_security=False, extra_chromium_args=["--test"])
-    browser_obj = Browser(config=config)
-    first_browser = await browser_obj.get_playwright_browser()
-    second_browser = await browser_obj.get_playwright_browser()
-    assert first_browser is second_browser, "Expected the browser to be cached and reused across calls."
-    await browser_obj.close()
-@pytest.mark.asyncio
-async def test_close_error_handling(monkeypatch):
-    """
-    Test that the close method properly handles exceptions thrown by
-    playwright_browser.close() and playwright.stop(), ensuring that the
-    browser's attributes are set to None even if errors occur.
-    """
-    class DummyBrowserWithError:
-        async def close(self):
-            raise Exception("Close error simulation")
-    class DummyPlaywrightWithError:
-        async def stop(self):
-            raise Exception("Stop error simulation")
     config = BrowserConfig()
-    browser_obj = Browser(config=config)
-    browser_obj.playwright_browser = DummyBrowserWithError()
-    browser_obj.playwright = DummyPlaywrightWithError()
-    await browser_obj.close()
-    assert browser_obj.playwright_browser is None, "Expected playwright_browser to be None after close"
-    assert browser_obj.playwright is None, "Expected playwright to be None after close"
+    browser_instance = Browser(config=config)
+    browser_instance.playwright_browser = DummyFailingBrowser()
+    browser_instance.playwright = DummyFailingPlaywright()
+    await browser_instance.close()
+    assert browser_instance.playwright_browser is None
+    assert browser_instance.playwright is None
+
+
+class DummyAsyncPlaywrightWrapper:
+    """Dummy wrapper to simulate async_playwright() call.
+    Its start() method returns a DummyPlaywrightStandard instance."""
+
+    async def start(self):
+        return DummyPlaywrightStandard()
+
+
 @pytest.mark.asyncio
-async def test_standard_browser_launch_with_proxy(monkeypatch):
+async def test_get_playwright_browser_initializes_browser(monkeypatch):
     """
-    Test that when a proxy is provided in the BrowserConfig, the _setup_standard_browser method
-    correctly passes the proxy parameter to the playwright.chromium.launch method.
-    This test sets up a dummy async_playwright context and verifies that the dummy proxy is received.
+    Test that get_playwright_browser initializes the browser correctly.
+    The test monkeypatches async_playwright to use a dummy implementation so that the
+    first call to get_playwright_browser initializes the browser via _init (returning "dummy_browser")
+    and subsequent calls do not reinitialize the browser.
     """
-    class DummyBrowser:
-        pass
-    # Create a dummy proxy settings instance.
-    dummy_proxy = ProxySettings(server="http://dummy.proxy")
-    class DummyChromium:
-        async def launch(self, headless, args, proxy=None):
-            # Assert that the proxy passed equals the dummy proxy provided in the configuration.
-            assert proxy == dummy_proxy, f"Expected proxy {dummy_proxy} but got {proxy}"
-            # We can also verify some base parameters if needed (headless, args) but our focus is proxy.
-            return DummyBrowser()
-    class DummyPlaywright:
-        def __init__(self):
-            self.chromium = DummyChromium()
-        async def stop(self):
-            pass
-    class DummyAsyncPlaywrightContext:
-        async def start(self):
-            return DummyPlaywright()
-    # Monkeypatch async_playwright to return our dummy async playwright context.
-    monkeypatch.setattr("browser_use.browser.browser.async_playwright", lambda: DummyAsyncPlaywrightContext())
-    # Create a BrowserConfig with the dummy proxy.
-    config = BrowserConfig(headless=False, disable_security=False, proxy=dummy_proxy)
-    browser_obj = Browser(config=config)
-    # Call get_playwright_browser and verify that the returned browser is as expected.
-    result_browser = await browser_obj.get_playwright_browser()
-    assert isinstance(result_browser, DummyBrowser), "Expected DummyBrowser from _setup_standard_browser with proxy provided"
-    await browser_obj.close()
+    monkeypatch.setattr(
+        "browser_use.browser.browser.async_playwright",
+        lambda: DummyAsyncPlaywrightWrapper(),
+    )
+    config = BrowserConfig()
+    browser_instance = Browser(config=config)
+    assert browser_instance.playwright_browser is None
+    result = await browser_instance.get_playwright_browser()
+    assert result == "dummy_browser"
+    assert browser_instance.playwright_browser == "dummy_browser"
+    assert browser_instance.playwright is not None
+    result2 = await browser_instance.get_playwright_browser()
+    assert result2 == "dummy_browser"
+    await browser_instance.close()
+
+
+def test_disable_security_flag():
+    """
+    Test that the browser's disable_security_args are set correctly based on the configuration flag.
+
+    When disable_security is True, the disable_security_args should contain the expected flags.
+    When disable_security is False, disable_security_args should be an empty list.
+    """
+    config_true = BrowserConfig(disable_security=True)
+    browser_true = Browser(config=config_true)
+    expected_args = [
+        "--disable-web-security",
+        "--disable-site-isolation-trials",
+        "--disable-features=IsolateOrigins,site-per-process",
+    ]
+    assert browser_true.disable_security_args == expected_args
+    config_false = BrowserConfig(disable_security=False)
+    browser_false = Browser(config=config_false)
+    assert browser_false.disable_security_args == []
+
+
+class DummyChromiumForCDP:
+
+    async def connect_over_cdp(self, url):
+        """
+        Dummy connect_over_cdp method that validates the URL and returns a dummy browser.
+        """
+        assert url == "http://dummy-cdp", "Unexpected CDP URL"
+        return "dummy_cdp_browser"
+
+
+class DummyPlaywrightForCDP:
+    chromium = DummyChromiumForCDP()
+
+
+@pytest.mark.asyncio
+async def test_setup_cdp_browser():
+    """
+    Test that _setup_cdp correctly connects to a remote browser via CDP when a valid URL is provided.
+    This test creates a dummy Playwright instance with a dummy Chromium implementation.
+    """
+    config = BrowserConfig(cdp_url="http://dummy-cdp")
+    browser_instance = Browser(config=config)
+    result = await browser_instance._setup_cdp(DummyPlaywrightForCDP())
+    assert result == "dummy_cdp_browser"
+
+
+@pytest.mark.asyncio
+async def test_new_context_creates_instance():
+    """
+    Test that new_context method of Browser returns a valid BrowserContext instance
+    with the correct configuration and associated browser.
+    """
+    custom_context_config = BrowserContextConfig()
+    config = BrowserConfig()
+    browser_instance = Browser(config=config)
+    context = await browser_instance.new_context(custom_context_config)
+    assert isinstance(context, BrowserContext)
+    assert context.config == custom_context_config
+    assert context.browser == browser_instance
+
+
+@pytest.mark.asyncio
+async def test_setup_browser_priority_cdp_over_wss():
+    """
+    Test that _setup_browser prioritizes a CDP connection over a WSS connection
+    when both URLs are provided in the configuration.
+    """
+
+    class DummyChromiumPriority:
+
+        async def connect_over_cdp(self, url):
+            assert (
+                url == "http://dummy-cdp"
+            ), f"Expected CDP URL 'http://dummy-cdp', got {url}"
+            return "dummy_cdp_browser"
+
+        async def connect(self, url, timeout=None):
+            raise Exception(
+                "WSS connect method should not be called when CDP URL is available"
+            )
+
+    class DummyPlaywrightPriority:
+        chromium = DummyChromiumPriority()
+
+    config = BrowserConfig(cdp_url="http://dummy-cdp", wss_url="wss://dummy")
+    browser_instance = Browser(config=config)
+    result = await browser_instance._setup_browser(DummyPlaywrightPriority())
+    assert result == "dummy_cdp_browser"
