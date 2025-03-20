@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from langchain_core.messages import (
 	AIMessage,
@@ -18,7 +19,17 @@ from browser_use.agent.views import ActionResult, AgentOutput, AgentStepInfo, Me
 from browser_use.browser.views import BrowserState
 from browser_use.utils import time_execution_sync
 
+if TYPE_CHECKING:
+	from browser_use.browser.context import BrowserContext
+
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MessageManagerContext:
+	"""Context for the MessageManager"""
+
+	browser_context: 'BrowserContext'
 
 
 class MessageManagerSettings(BaseModel):
@@ -34,11 +45,13 @@ class MessageManagerSettings(BaseModel):
 class MessageManager:
 	def __init__(
 		self,
+		context: MessageManagerContext,
 		task: str,
 		system_message: SystemMessage,
 		settings: MessageManagerSettings = MessageManagerSettings(),
 		state: MessageManagerState = MessageManagerState(),
 	):
+		self.context = context
 		self.task = task
 		self.settings = settings
 		self.state = state
@@ -47,6 +60,10 @@ class MessageManager:
 		# Only initialize messages if state is empty
 		if len(self.state.history.messages) == 0:
 			self._init_messages()
+
+	@property
+	def downloaded_files(self) -> List[str]:
+		return list(self.context.browser_context.state.downloaded_files)
 
 	def _init_messages(self) -> None:
 		"""Initialize the message history with system message, context, task, and other initial messages"""
@@ -96,10 +113,6 @@ class MessageManager:
 		placeholder_message = HumanMessage(content='[Your task history memory starts here]')
 		self._add_message_with_tokens(placeholder_message)
 
-		if self.settings.available_file_paths:
-			filepaths_msg = HumanMessage(content=f'Here are file paths you can use: {self.settings.available_file_paths}')
-			self._add_message_with_tokens(filepaths_msg)
-
 	def add_new_task(self, new_task: str) -> None:
 		content = f'Your new ultimate task is: """{new_task}""". Take the previous context into account and finish your new ultimate task. '
 		msg = HumanMessage(content=content)
@@ -133,12 +146,17 @@ class MessageManager:
 						self._add_message_with_tokens(msg)
 					result = None  # if result in history, we dont want to add it again
 
+		available_file_paths = self.settings.available_file_paths or [] + list(
+			self.context.browser_context.state.downloaded_files
+		)
+
 		# otherwise add state message and result to next message (which will not stay in memory)
 		state_message = AgentMessagePrompt(
 			state,
 			result,
 			include_attributes=self.settings.include_attributes,
 			step_info=step_info,
+			available_file_paths=available_file_paths,
 		).get_user_message(use_vision)
 		self._add_message_with_tokens(state_message)
 

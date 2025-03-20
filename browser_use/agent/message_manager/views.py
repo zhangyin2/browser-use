@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from langchain_core.load import dumpd, load
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
@@ -125,5 +125,7 @@ class MessageManagerState(BaseModel):
 
 	history: MessageHistory = Field(default_factory=MessageHistory)
 	tool_id: int = 1
+
+	downloaded_files: Optional[List[str]] = None
 
 	model_config = ConfigDict(arbitrary_types_allowed=True)

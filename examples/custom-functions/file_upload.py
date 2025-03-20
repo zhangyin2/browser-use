@@ -12,7 +12,7 @@ from langchain_openai import ChatOpenAI
 
 from browser_use import Agent, Controller
 from browser_use.browser.browser import Browser, BrowserConfig
-from browser_use.browser.context import BrowserContext
+from browser_use.browser.context import BrowserContext, BrowserContextConfig
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,10 @@ logger = logging.getLogger(__name__)
 browser = Browser(
 	config=BrowserConfig(
 		headless=False,
-		chrome_instance_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+		new_context_config=BrowserContextConfig(
+			save_downloads_path='./downloads',
+		),
+		# chrome_instance_path="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
 	)
 )
 controller = Controller()
@@ -84,9 +87,9 @@ def create_file(file_type: str = 'txt'):
 
 
 async def main():
-	task = f'Go to https://kzmpmkh2zfk1ojnpxfn1.lite.vusercontent.net/ and - read the file content and upload them to fields'
+	task = 'Go to https://v0-download-and-upload-text.vercel.app/ and first download the file and then upload that file to the upload text file field'
 
-	available_file_paths = [create_file('txt'), create_file('pdf'), create_file('csv')]
+	# available_file_paths = ['./sample-file.txt']
 
 	model = ChatOpenAI(model='gpt-4o')
 	agent = Agent(
@@ -94,7 +97,7 @@ async def main():
 		llm=model,
 		controller=controller,
 		browser=browser,
-		available_file_paths=available_file_paths,
+		# available_file_paths=available_file_paths,
 	)
 
 	await agent.run()

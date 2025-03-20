@@ -20,7 +20,7 @@ from langchain_core.messages import (
 from pydantic import BaseModel, ValidationError
 
 from browser_use.agent.gif import create_history_gif
-from browser_use.agent.message_manager.service import MessageManager, MessageManagerSettings
+from browser_use.agent.message_manager.service import MessageManager, MessageManagerContext, MessageManagerSettings
 from browser_use.agent.message_manager.utils import convert_input_messages, extract_json_from_model_output, save_conversation
 from browser_use.agent.prompts import AgentMessagePrompt, PlannerPrompt, SystemPrompt
 from browser_use.agent.views import (
@@ -160,9 +160,6 @@ class Agent(Generic[Context]):
 			planner_interval=planner_interval,
 		)
 
-		# Initialize state
-		self.state = injected_agent_state or AgentState()
-
 		# Action setup
 		self._setup_action_models()
 		self._set_browser_use_version_and_source()
@@ -177,8 +174,24 @@ class Agent(Generic[Context]):
 		self.tool_calling_method = self._set_tool_calling_method()
 		self.settings.message_context = self._set_message_context()
 
+		# Browser setup
+		self.injected_browser = browser is not None
+		self.injected_browser_context = browser_context is not None
+		self.browser = browser if browser is not None else (None if browser_context else Browser())
+		if browser_context:
+			self.browser_context = browser_context
+		elif self.browser:
+			self.browser_context = BrowserContext(browser=self.browser, config=self.browser.config.new_context_config)
+		else:
+			self.browser = Browser()
+			self.browser_context = BrowserContext(browser=self.browser)
+
+		# Initialize state
+		self.state = injected_agent_state or AgentState()
+
 		# Initialize message manager with state
 		self._message_manager = MessageManager(
+			context=MessageManagerContext(browser_context=self.browser_context),
 			task=task,
 			system_message=SystemPrompt(
 				action_description=self.available_actions,
@@ -192,21 +205,10 @@ class Agent(Generic[Context]):
 				message_context=self.settings.message_context,
 				sensitive_data=sensitive_data,
 				available_file_paths=self.settings.available_file_paths,
+				# pointer to browser context state
 			),
 			state=self.state.message_manager_state,
 		)
-
-		# Browser setup
-		self.injected_browser = browser is not None
-		self.injected_browser_context = browser_context is not None
-		self.browser = browser if browser is not None else (None if browser_context else Browser())
-		if browser_context:
-			self.browser_context = browser_context
-		elif self.browser:
-			self.browser_context = BrowserContext(browser=self.browser, config=self.browser.config.new_context_config)
-		else:
-			self.browser = Browser()
-			self.browser_context = BrowserContext(browser=self.browser)
 
 		# Callbacks
 		self.register_new_step_callback = register_new_step_callback
@@ -679,7 +681,7 @@ class Agent(Generic[Context]):
 				self.browser_context,
 				self.settings.page_extraction_llm,
 				self.sensitive_data,
-				self.settings.available_file_paths,
+				self.settings.available_file_paths or [] + list(self.browser_context.state.downloaded_files),
 				context=self.context,
 			)
 
@@ -946,7 +948,9 @@ class Agent(Generic[Context]):
 		response = await self.settings.planner_llm.ainvoke(planner_messages)
 		plan = str(response.content)
 		# if deepseek-reasoner, remove think tags
-		if self.planner_model_name and ('deepseek-r1' in self.planner_model_name or 'deepseek-reasoner' in self.planner_model_name):
+		if self.planner_model_name and (
+			'deepseek-r1' in self.planner_model_name or 'deepseek-reasoner' in self.planner_model_name
+		):
 			plan = self._remove_think_tags(plan)
 		try:
 			plan_json = json.loads(plan)

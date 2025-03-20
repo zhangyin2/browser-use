@@ -14,12 +14,12 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional, TypedDict
 
-from playwright._impl._errors import TimeoutError
 from playwright.async_api import Browser as PlaywrightBrowser
 from playwright.async_api import (
 	BrowserContext as PlaywrightBrowserContext,
 )
 from playwright.async_api import (
+	Download,
 	ElementHandle,
 	FrameLocator,
 	Page,
@@ -149,6 +149,7 @@ class BrowserContextState:
 	"""
 
 	target_id: str | None = None  # CDP target ID
+	downloaded_files: set[str] = field(default_factory=set)  # Downloads that were downloaded during the session
 
 
 class BrowserContext:
@@ -1084,11 +1085,11 @@ class BrowserContext:
 				pass
 
 			# Get element properties to determine input method
-			tag_handle = await element_handle.get_property("tagName")
+			tag_handle = await element_handle.get_property('tagName')
 			tag_name = (await tag_handle.json_value()).lower()
 			is_contenteditable = await element_handle.get_property('isContentEditable')
-			readonly_handle = await element_handle.get_property("readOnly")
-			disabled_handle = await element_handle.get_property("disabled")
+			readonly_handle = await element_handle.get_property('readOnly')
+			disabled_handle = await element_handle.get_property('disabled')
 
 			readonly = await readonly_handle.json_value() if readonly_handle else False
 			disabled = await disabled_handle.json_value() if disabled_handle else False
@@ -1103,6 +1104,19 @@ class BrowserContext:
 			logger.debug(f'Failed to input text into element: {repr(element_node)}. Error: {str(e)}')
 			raise BrowserError(f'Failed to input text into index {element_node.highlight_index}')
 
+	@time_execution_async('--handle_download')
+	async def _handle_download(self, download: Download):
+		"""Handle a download event"""
+		if self.config.save_downloads_path:
+			file_save_path = self.config.save_downloads_path + f'/{download.suggested_filename}'
+			await download.save_as(file_save_path)
+
+			self.state.downloaded_files.add(file_save_path)
+
+			logger.info(f'Download triggered. Saved file to: {file_save_path}')
+		else:
+			logger.info('No download path specified. Skipping download.')
+
 	@time_execution_async('--click_element_node')
 	async def _click_element_node(self, element_node: DOMElementNode) -> Optional[str]:
 		"""
@@ -1111,10 +1125,6 @@ class BrowserContext:
 		page = await self.get_current_page()
 
 		try:
-			# Highlight before clicking
-			# if element_node.highlight_index is not None:
-			# 	await self._update_state(focus_element=element_node.highlight_index)
-
 			element_handle = await self.get_locate_element(element_node)
 
 			if element_handle is None:
@@ -1124,28 +1134,21 @@ class BrowserContext:
 				"""Performs the actual click, handling both download
 				and navigation scenarios."""
 				if self.config.save_downloads_path:
+					# Store the listener function so we can remove it later
+					def download_listener(download):
+						return asyncio.create_task(self._handle_download(download))
+
 					try:
-						# Try short-timeout expect_download to detect a file download has been been triggered
-						async with page.expect_download(timeout=5000) as download_info:
-							await click_func()
-						download = await download_info.value
-						# Determine file path
-						suggested_filename = download.suggested_filename
-						unique_filename = await self._get_unique_filename(self.config.save_downloads_path, suggested_filename)
-						download_path = os.path.join(self.config.save_downloads_path, unique_filename)
-						await download.save_as(download_path)
-						logger.debug(f'Download triggered. Saved file to: {download_path}')
-						return download_path
-					except TimeoutError:
-						# If no download is triggered, treat as normal click
-						logger.debug('No download triggered within timeout. Checking navigation...')
+						# Add the listener
+						page.on('download', download_listener)
+
+						# Perform the click
+						await click_func()
 						await page.wait_for_load_state()
 						await self._check_and_handle_navigation(page)
-				else:
-					# Standard click logic if no download is expected
-					await click_func()
-					await page.wait_for_load_state()
-					await self._check_and_handle_navigation(page)
+					finally:
+						# Always remove the listener, even if an error occurred
+						page.remove_listener('download', download_listener)
 
 			try:
 				return await perform_click(lambda: element_handle.click(timeout=1500))

@@ -67,11 +67,13 @@ class AgentMessagePrompt:
 		result: Optional[List['ActionResult']] = None,
 		include_attributes: list[str] = [],
 		step_info: Optional['AgentStepInfo'] = None,
+		available_file_paths: list[str] = [],
 	):
 		self.state = state
 		self.result = result
 		self.include_attributes = include_attributes
 		self.step_info = step_info
+		self.available_file_paths = available_file_paths
 
 	def get_user_message(self, use_vision: bool = True) -> HumanMessage:
 		elements_text = self.state.element_tree.clickable_elements_to_string(include_attributes=self.include_attributes)
@@ -107,6 +109,7 @@ class AgentMessagePrompt:
 [Current state starts here]
 The following is one-time information - if you need to remember it write it to memory:
 Current url: {self.state.url}
+Available file_paths: {self.available_file_paths}
 Available tabs:
 {self.state.tabs}
 Interactive elements from top layer of the current page inside the viewport:

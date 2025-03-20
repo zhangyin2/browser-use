@@ -23,13 +23,18 @@ browser = Browser(
 
 async def run_download():
 	agent = Agent(
-		task=('Go to "https://file-examples.com/" and download the smallest doc file.'),
+		task=('Go to https://v0-download-and-upload-text.vercel.app/" and download the file.'),
 		llm=llm,
 		max_actions_per_step=8,
 		use_vision=True,
 		browser=browser,
+		save_conversation_path='~/Downloads',
 	)
+
 	await agent.run(max_steps=25)
+
+	print(agent.browser_context.state.downloaded_files, '---', 'downloaded_files')
+
 	await browser.close()
 
 
