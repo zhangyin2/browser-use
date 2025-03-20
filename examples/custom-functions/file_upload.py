@@ -40,30 +40,45 @@ async def upload_file(index: int, path: str, browser: BrowserContext, available_
 		return ActionResult(error=f'File {path} does not exist')
 
 	dom_el = await browser.get_dom_element_by_index(index)
+	page = await browser.get_current_page()
 
-	file_upload_dom_el = dom_el.get_file_upload_element()
-
-	if file_upload_dom_el is None:
-		msg = f'No file upload element found at index {index}'
-		logger.info(msg)
-		return ActionResult(error=msg)
-
-	file_upload_el = await browser.get_locate_element(file_upload_dom_el)
-
-	if file_upload_el is None:
-		msg = f'No file upload element found at index {index}'
-		logger.info(msg)
-		return ActionResult(error=msg)
-
+	# Try file chooser approach first
 	try:
-		await file_upload_el.set_input_files(path)
-		msg = f'Successfully uploaded file to index {index}'
+		# Get the clickable element
+		click_el = await browser.get_locate_element(dom_el)
+		if click_el is None:
+			return ActionResult(error=f'No clickable element found at index {index}')
+
+		# Setup file chooser listener with a small timeout and click the element
+		async with page.expect_file_chooser(timeout=2000) as fc_info:  # 2 second timeout
+			await click_el.click()
+
+		file_chooser = await fc_info.value
+		await file_chooser.set_files(path)
+
+		msg = f'Successfully uploaded file to index {index} using file chooser'
 		logger.info(msg)
 		return ActionResult(extracted_content=msg, include_in_memory=True)
 	except Exception as e:
-		msg = f'Failed to upload file to index {index}: {str(e)}'
-		logger.info(msg)
-		return ActionResult(error=msg)
+		logger.info(f'File chooser approach failed: {str(e)}')
+		# Continue to try direct input approach
+
+	# If file chooser fails, try direct file input approach
+	file_upload_dom_el = dom_el.get_file_upload_element()
+	if file_upload_dom_el is not None:
+		file_upload_el = await browser.get_locate_element(file_upload_dom_el)
+		if file_upload_el is not None:
+			try:
+				await file_upload_el.set_input_files(path)
+				msg = f'Successfully uploaded file to index {index} using direct input'
+				logger.info(msg)
+				return ActionResult(extracted_content=msg, include_in_memory=True)
+			except Exception as e:
+				msg = f'Direct file input approach failed: {str(e)}'
+				logger.info(msg)
+				return ActionResult(error=msg)
+
+	return ActionResult(error=f'Both file upload approaches failed for index {index}')
 
 
 @controller.action('Read the file content of a file given a path')
@@ -102,9 +117,9 @@ async def main():
 
 	await agent.run()
 
-	await browser.close()
-
 	input('Press Enter to close...')
+
+	await browser.close()
 
 
 if __name__ == '__main__':
