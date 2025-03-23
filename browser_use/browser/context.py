@@ -12,7 +12,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional, TypedDict
+from typing import TYPE_CHECKING, Awaitable, Callable, Optional, TypedDict
 
 from playwright.async_api import Browser as PlaywrightBrowser
 from playwright.async_api import (
@@ -158,6 +158,7 @@ class BrowserContext:
 		browser: 'Browser',
 		config: BrowserContextConfig = BrowserContextConfig(),
 		state: Optional[BrowserContextState] = None,
+		register_file_upload_listener_function: Callable[[str], Awaitable[None]] | None = None,
 	):
 		self.context_id = str(uuid.uuid4())
 		logger.debug(f'Initializing new browser context with id: {self.context_id}')
@@ -169,6 +170,9 @@ class BrowserContext:
 
 		# Initialize these as None - they'll be set up when needed
 		self.session: BrowserSession | None = None
+
+		# registry for extra functions
+		self.register_file_upload_listener_function = register_file_upload_listener_function
 
 	async def __aenter__(self):
 		"""Async context manager entry"""
@@ -1110,6 +1114,10 @@ class BrowserContext:
 		if self.config.save_downloads_path:
 			file_save_path = self.config.save_downloads_path + f'/{download.suggested_filename}'
 			await download.save_as(file_save_path)
+
+			if self.register_file_upload_listener_function:
+				logger.info(f'Calling register_file_upload_listener_function with {file_save_path}')
+				await self.register_file_upload_listener_function(file_save_path)
 
 			self.state.downloaded_files.add(file_save_path)
 
