@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import gc
+import inspect
 import json
 import logging
 import re
@@ -93,14 +93,14 @@ class Agent(Generic[Context]):
 		initial_actions: Optional[List[Dict[str, Dict[str, Any]]]] = None,
 		# Cloud Callbacks
 		register_new_step_callback: Union[
-            Callable[['BrowserState', 'AgentOutput', int], None],  # Sync callback
-            Callable[['BrowserState', 'AgentOutput', int], Awaitable[None]],  # Async callback
-            None
-        ] = None,
+			Callable[['BrowserState', 'AgentOutput', int], None],  # Sync callback
+			Callable[['BrowserState', 'AgentOutput', int], Awaitable[None]],  # Async callback
+			None,
+		] = None,
 		register_done_callback: Union[
-			Callable[['AgentHistoryList'], Awaitable[None]], # Async Callback
-			Callable[['AgentHistoryList'], None], #Sync Callback
-			None
+			Callable[['AgentHistoryList'], Awaitable[None]],  # Async Callback
+			Callable[['AgentHistoryList'], None],  # Sync Callback
+			None,
 		] = None,
 		register_external_agent_status_raise_error_callback: Callable[[], Awaitable[bool]] | None = None,
 		# Agent settings
@@ -536,33 +536,30 @@ class Agent(Generic[Context]):
 		else:
 			structured_llm = self.llm.with_structured_output(self.AgentOutput, include_raw=True, method=self.tool_calling_method)
 			response: dict[str, Any] = await structured_llm.ainvoke(input_messages)  # type: ignore
-			
+
 		# Handle tool call responses
 		if response.get('parsing_error') and 'raw' in response:
 			raw_msg = response['raw']
 			if hasattr(raw_msg, 'tool_calls') and raw_msg.tool_calls:
 				# Convert tool calls to AgentOutput format
-    
+
 				tool_call = raw_msg.tool_calls[0]  # Take first tool call
-    
+
 				# Create current state
 				tool_call_name = tool_call['name']
 				tool_call_args = tool_call['args']
-				
+
 				current_state = {
 					'page_summary': 'Processing tool call',
 					'evaluation_previous_goal': 'Executing action',
 					'memory': 'Using tool call',
-					'next_goal': f'Execute {tool_call_name}'
+					'next_goal': f'Execute {tool_call_name}',
 				}
-				
+
 				# Create action from tool call
 				action = {tool_call_name: tool_call_args}
 
-				parsed = self.AgentOutput(
-					current_state=current_state,
-					action=[self.ActionModel(**action)]
-				)
+				parsed = self.AgentOutput(current_state=current_state, action=[self.ActionModel(**action)])
 			else:
 				parsed = None
 		else:
@@ -570,12 +567,11 @@ class Agent(Generic[Context]):
 
 		if not parsed:
 			try:
-				parsed_json = extract_json_from_model_output(response["raw"].content)
+				parsed_json = extract_json_from_model_output(response['raw'].content)
 				parsed = self.AgentOutput(**parsed_json)
 			except:
 				logger.warning(f'Failed to parse model output: {response["raw"].content} {str(e)}')
 				raise ValueError('Could not parse response.')
-
 
 		# cut the number of actions to max_actions_per_step if needed
 		if len(parsed.action) > self.settings.max_actions_per_step:
@@ -892,7 +888,9 @@ class Agent(Generic[Context]):
 		if not historical_element or not current_state.element_tree:
 			return action
 
-		current_element = HistoryTreeProcessor.find_history_element_in_tree(historical_element, current_state.element_tree)
+		current_element = HistoryTreeProcessor.find_history_element_in_tree(
+			historical_element, current_state.element_tree, match_criteria=['xpath']
+		)
 
 		if not current_element or current_element.highlight_index is None:
 			return None
@@ -917,11 +915,16 @@ class Agent(Generic[Context]):
 		history = AgentHistoryList.load_from_file(history_file, self.AgentOutput)
 		return await self.rerun_history(history, **kwargs)
 
-	def save_history(self, file_path: Optional[str | Path] = None) -> None:
-		"""Save the history to a file"""
+	def save_history(self, file_path: Optional[str | Path] = None, exclude_screenshots: bool = False) -> None:
+		"""Save the history to a file
+
+		Args:
+			file_path: Path to save the file to. Defaults to 'AgentHistory.json'
+			exclude_screenshots: If True, screenshots will be excluded from the saved file
+		"""
 		if not file_path:
 			file_path = 'AgentHistory.json'
-		self.state.history.save_to_file(file_path)
+		self.state.history.save_to_file(file_path, exclude_screenshots=exclude_screenshots)
 
 	def pause(self) -> None:
 		"""Pause the agent before the next step"""
@@ -993,7 +996,9 @@ class Agent(Generic[Context]):
 		response = await self.settings.planner_llm.ainvoke(planner_messages)
 		plan = str(response.content)
 		# if deepseek-reasoner, remove think tags
-		if self.planner_model_name and ('deepseek-r1' in self.planner_model_name or 'deepseek-reasoner' in self.planner_model_name):
+		if self.planner_model_name and (
+			'deepseek-r1' in self.planner_model_name or 'deepseek-reasoner' in self.planner_model_name
+		):
 			plan = self._remove_think_tags(plan)
 		try:
 			plan_json = json.loads(plan)
@@ -1018,9 +1023,9 @@ class Agent(Generic[Context]):
 				await self.browser_context.close()
 			if self.browser and not self.injected_browser:
 				await self.browser.close()
-			
+
 			# Force garbage collection
 			gc.collect()
-			
+
 		except Exception as e:
-			logger.error(f"Error during cleanup: {e}")
+			logger.error(f'Error during cleanup: {e}')

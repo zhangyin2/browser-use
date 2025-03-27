@@ -230,20 +230,37 @@ class AgentHistoryList(BaseModel):
 		"""Representation of the AgentHistoryList object"""
 		return self.__str__()
 
-	def save_to_file(self, filepath: str | Path) -> None:
-		"""Save history to JSON file with proper serialization"""
+	def save_to_file(self, filepath: str | Path, exclude_screenshots: bool = False) -> None:
+		"""Save history to JSON file with proper serialization
+
+		Args:
+			filepath: Path to save the file to
+			exclude_screenshots: If True, screenshots will be excluded from the saved file
+		"""
 		try:
 			Path(filepath).parent.mkdir(parents=True, exist_ok=True)
-			data = self.model_dump()
+			data = self.model_dump(exclude_screenshots=exclude_screenshots)
 			with open(filepath, 'w', encoding='utf-8') as f:
 				json.dump(data, f, indent=2)
 		except Exception as e:
 			raise e
 
-	def model_dump(self, **kwargs) -> Dict[str, Any]:
-		"""Custom serialization that properly uses AgentHistory's model_dump"""
+	def model_dump(self, exclude_screenshots: bool = False, **kwargs) -> Dict[str, Any]:
+		"""Custom serialization that properly uses AgentHistory's model_dump
+
+		Args:
+			exclude_screenshots: If True, screenshots will be excluded from the dump
+			**kwargs: Additional arguments passed to model_dump
+		"""
+		history_data = []
+		for h in self.history:
+			h_data = h.model_dump(**kwargs)
+			if exclude_screenshots:
+				h_data['state']['screenshot'] = None
+			history_data.append(h_data)
+
 		return {
-			'history': [h.model_dump(**kwargs) for h in self.history],
+			'history': history_data,
 		}
 
 	@classmethod
