@@ -16,16 +16,15 @@ from browser_use.browser.context import BrowserContext, BrowserContextConfig
 
 logger = logging.getLogger(__name__)
 
+
 # Initialize controller first
 browser = Browser(
 	config=BrowserConfig(
 		headless=False,
-		new_context_config=BrowserContextConfig(
-			save_downloads_path='./downloads',
-		),
 		# chrome_instance_path="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-	)
+	),
 )
+
 controller = Controller()
 
 
@@ -101,17 +100,30 @@ def create_file(file_type: str = 'txt'):
 	return str(file_path)
 
 
+async def file_download_listener(path: str):
+	print(f'File downloaded: {path}')
+
+
 async def main():
 	task = 'Go to https://v0-download-and-upload-text.vercel.app/ and first download the file and then upload that file to the upload text file field'
 
 	# available_file_paths = ['./sample-file.txt']
 
 	model = ChatOpenAI(model='gpt-4o')
+
+	context = BrowserContext(
+		browser=browser,
+		config=BrowserContextConfig(
+			save_downloads_path='./downloads/browser_use/12312312312/1312312',
+		),
+		register_file_download_listener_function=file_download_listener,
+	)
+
 	agent = Agent(
 		task=task,
 		llm=model,
 		controller=controller,
-		browser=browser,
+		browser_context=context,
 		# available_file_paths=available_file_paths,
 	)
 
