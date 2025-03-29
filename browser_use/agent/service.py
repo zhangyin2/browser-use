@@ -889,7 +889,7 @@ class Agent(Generic[Context]):
 			return action
 
 		current_element = HistoryTreeProcessor.find_history_element_in_tree(
-			historical_element, current_state.element_tree, match_criteria=['xpath']
+			historical_element, current_state.element_tree, match_criteria=['attributes']
 		)
 
 		if not current_element or current_element.highlight_index is None:
