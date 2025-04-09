@@ -174,7 +174,7 @@ class Registry(Generic[Context]):
 			params.__dict__[key] = replace_secrets(value)
 		return params
 
-	@time_execution_sync('--create_action_model')
+	# @time_execution_sync('--create_action_model')
 	def create_action_model(self, include_actions: Optional[list[str]] = None, page=None) -> Type[ActionModel]:
 		"""Creates a Pydantic model from registered actions, used by LLM APIs that support tool calling & enforce a schema"""
 

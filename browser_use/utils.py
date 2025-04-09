@@ -279,7 +279,7 @@ def time_execution_sync(additional_text: str = '') -> Callable[[Callable[P, R]],
 			start_time = time.time()
 			result = func(*args, **kwargs)
 			execution_time = time.time() - start_time
-			logger.debug(f'{additional_text} Execution time: {execution_time:.2f} seconds')
+			logger.debug(f'{additional_text} Execution time (sync): {execution_time:.2f} seconds')
 			return result
 
 		return wrapper

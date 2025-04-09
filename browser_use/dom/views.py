@@ -3,7 +3,6 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from browser_use.dom.history_tree_processor.view import CoordinateSet, HashedDomElement, ViewportInfo
-from browser_use.utils import time_execution_sync
 
 # Avoid circular import issues
 if TYPE_CHECKING:
@@ -149,7 +148,7 @@ class DOMElementNode(DOMBaseNode):
 		collect_text(self, 0)
 		return '\n'.join(text_parts).strip()
 
-	@time_execution_sync('--clickable_elements_to_string')
+	# @time_execution_sync('--clickable_elements_to_string') #? This function is very fast, no need to time it
 	def clickable_elements_to_string(self, include_attributes: list[str] | None = None) -> str:
 		"""Convert the processed DOM content to HTML."""
 		formatted_text = []

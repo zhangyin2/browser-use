@@ -891,7 +891,7 @@ class BrowserContext:
 		structure = await page.evaluate(debug_script)
 		return structure
 
-	@time_execution_sync('--get_state')  # This decorator might need to be updated to handle async
+	@time_execution_async('--get_state')
 	async def get_state(self, cache_clickable_elements_hashes: bool) -> BrowserState:
 		"""Get the current state of the browser
 
@@ -932,6 +932,7 @@ class BrowserContext:
 
 		return session.cached_state
 
+	@time_execution_async('--get_updated_state')
 	async def _get_updated_state(self, focus_element: int = -1) -> BrowserState:
 		"""Update and return state."""
 		session = await self.get_session()
