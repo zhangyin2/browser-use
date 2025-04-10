@@ -167,7 +167,7 @@ class MessageManager:
 			msg = AIMessage(content=plan)
 			self._add_message_with_tokens(msg, position)
 
-	@time_execution_sync('--get_messages')
+	# @time_execution_sync('--get_messages')
 	def get_messages(self) -> List[BaseMessage]:
 		"""Get current message list, potentially trimmed to max tokens"""
 

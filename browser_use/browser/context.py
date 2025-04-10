@@ -35,7 +35,7 @@ from browser_use.browser.views import (
 from browser_use.dom.clickable_element_processor.service import ClickableElementProcessor
 from browser_use.dom.service import DomService
 from browser_use.dom.views import DOMElementNode, SelectorMap
-from browser_use.utils import time_execution_async, time_execution_sync
+from browser_use.utils import time_execution_async
 
 if TYPE_CHECKING:
 	from browser_use.browser.browser import Browser
@@ -1121,8 +1121,8 @@ class BrowserContext:
 		base_selector = ' > '.join(css_parts)
 		return base_selector
 
+	# @time_execution_sync('--enhanced_css_selector_for_element')
 	@classmethod
-	@time_execution_sync('--enhanced_css_selector_for_element')
 	def _enhanced_css_selector_for_element(cls, element: DOMElementNode, include_dynamic_attributes: bool = True) -> str:
 		"""
 		Creates a CSS selector for a DOM element, handling various edge cases and special characters.
