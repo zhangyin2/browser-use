@@ -74,6 +74,8 @@ class AgentSettings(BaseModel):
 	memory_interval: int = 10
 	memory_config: Optional[dict] = None
 
+	save_workflow_yaml: Optional[str] = None
+
 
 class AgentState(BaseModel):
 	"""Holds all state information for an Agent"""
@@ -370,7 +372,8 @@ class AgentHistoryList(BaseModel):
 			if h.model_output:
 				for action, interacted_element in zip(h.model_output.action, h.state.interacted_element):
 					output = action.model_dump(exclude_none=True)
-					output['interacted_element'] = interacted_element
+					if interacted_element:
+						output['interacted_element'] = interacted_element.to_dict()
 					outputs.append(output)
 		return outputs
 

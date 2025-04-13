@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, Generic, List, Optional, TypeVar, Union
 
+import yaml
 from dotenv import load_dotenv
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
@@ -127,6 +128,7 @@ class Agent(Generic[Context]):
 		message_context: Optional[str] = None,
 		generate_gif: bool | str = False,
 		available_file_paths: Optional[list[str]] = None,
+		save_workflow_yaml: Optional[str] = 'workflow.yaml',
 		include_attributes: list[str] = [
 			'title',
 			'type',
@@ -191,6 +193,7 @@ class Agent(Generic[Context]):
 			enable_memory=enable_memory,
 			memory_interval=memory_interval,
 			memory_config=memory_config,
+			save_workflow_yaml=save_workflow_yaml,
 		)
 
 		# Initialize state
@@ -860,7 +863,8 @@ class Agent(Generic[Context]):
 			)
 
 			await self.close()
-
+			if self.settings.save_workflow_yaml:
+				await self.save_workflow()
 			if self.settings.generate_gif:
 				output_path: str = 'agent_history.gif'
 				if isinstance(self.settings.generate_gif, str):
@@ -1313,3 +1317,11 @@ class Agent(Generic[Context]):
 		# Update done action model too
 		self.DoneActionModel = self.controller.registry.create_action_model(include_actions=['done'], page=page)
 		self.DoneAgentOutput = AgentOutput.type_with_custom_actions(self.DoneActionModel)
+
+	async def save_workflow(self):
+		"""Create a workflow from a yaml file from history"""
+		actions = self.state.history.model_actions()
+
+		# save actions to yaml file
+		with open(self.settings.save_workflow_yaml, 'w') as f:
+			yaml.dump(actions, f)

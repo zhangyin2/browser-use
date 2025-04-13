@@ -21,9 +21,8 @@ class Workflow:
 	def __init__(self, yaml_file: str, **variables):
 		self.yaml_file = yaml_file
 		self.variables = variables
-		self.raw_actions: List[WorkflowAction] = []
-		self._load_workflow()
 		self.step_index = 0
+		self.raw_actions: List[WorkflowAction] = self._load_workflow(yaml_file, variables)
 		self.actions: List[ActionModel] | None = None
 
 	def get_raw_action_dict(self):
@@ -66,17 +65,19 @@ class Workflow:
 		"""Get the length of the workflow"""
 		return len(self.raw_actions)
 
-	def _load_workflow(self):
+	@staticmethod
+	def _load_workflow(yaml_file, variables):
 		"""Load and parse workflow YAML"""
+		raw_actions: List[WorkflowAction] = []
 		# Load YAML file
-		with open(self.yaml_file, 'r') as f:
+		with open(yaml_file, 'r') as f:
 			workflow_data = yaml.safe_load(f)
 
 		# Convert to string for variable replacement
 		workflow_str = yaml.safe_dump(workflow_data)
 
 		# Replace variables
-		for var_name, value in self.variables.items():
+		for var_name, value in variables.items():
 			pattern = r'\{\{' + var_name + r'\}\}'
 			workflow_str = re.sub(pattern, str(value), workflow_str)
 
@@ -89,4 +90,6 @@ class Workflow:
 			action_name = next(iter(step_data.keys()))
 			parameters = step_data[action_name]
 			action = WorkflowAction(action_name=action_name, parameters=parameters or {})
-			self.raw_actions.append(action)
+			raw_actions.append(action)
+
+		return raw_actions
