@@ -1,0 +1,14 @@
+# Example workflow for researching a company
+# Variables needed: company_name, year
+
+# Search for the company
+- search_google:
+    query: "{{company_name}} company"
+
+# Extract information using LLM
+- sub_agent_call:
+    task: "click on the first search result"
+    max_steps: 3
+# Search for founders
+- open_tab:
+    url: "https://www.browser-use.com"

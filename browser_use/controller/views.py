@@ -67,6 +67,11 @@ class SendKeysAction(BaseModel):
 	keys: str
 
 
+class LLMCallAction(BaseModel):
+	task: str
+	max_steps: int = 3
+
+
 class GroupTabsAction(BaseModel):
 	tab_ids: list[int] = Field(..., description='List of tab IDs to group')
 	title: str = Field(..., description='Name for the tab group')

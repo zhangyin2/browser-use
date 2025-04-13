@@ -19,13 +19,13 @@ from browser_use.controller.registry.service import Registry
 from browser_use.controller.views import (
 	ClickElementAction,
 	ClickElementBySelectorAction,
-	ClickElementByTextAction,
 	ClickElementByXpathAction,
 	CloseTabAction,
 	DoneAction,
 	DragDropAction,
 	GoToUrlAction,
 	InputTextAction,
+	LLMCallAction,
 	NoParamsAction,
 	OpenTabAction,
 	Position,
@@ -216,33 +216,33 @@ class Controller(Generic[Context]):
 				logger.warning(f'Element not clickable with xpath {params.xpath} - most likely the page changed')
 				return ActionResult(error=str(e))
 
-		@self.registry.action('Click element with text', param_model=ClickElementByTextAction)
-		async def click_element_by_text(params: ClickElementByTextAction, browser: BrowserContext):
-			try:
-				element_node = await browser.get_locate_element_by_text(
-					text=params.text, nth=params.nth, element_type=params.element_type
-				)
+		# @self.registry.action('Click element with text', param_model=ClickElementByTextAction)
+		# async def click_element_by_text(params: ClickElementByTextAction, browser: BrowserContext):
+		# 	try:
+		# 		element_node = await browser.get_locate_element_by_text(
+		# 			text=params.text, nth=params.nth, element_type=params.element_type
+		# 		)
 
-				if element_node:
-					try:
-						is_hidden = await element_node.is_hidden()
-						if not is_hidden:
-							await element_node.scroll_into_view_if_needed()
-						await element_node.click(timeout=1500, force=True)
-					except Exception:
-						try:
-							# Handle with js evaluate if fails to click using playwright
-							await element_node.evaluate('el => el.click()')
-						except Exception as e:
-							logger.warning(f"Element not clickable with text '{params.text}' - {e}")
-							return ActionResult(error=str(e))
-					msg = f'🖱️  Clicked on element with text "{params.text}"'
-					return ActionResult(extracted_content=msg, include_in_memory=True)
-				else:
-					return ActionResult(error=f"No element found for text '{params.text}'")
-			except Exception as e:
-				logger.warning(f"Element not clickable with text '{params.text}' - {e}")
-				return ActionResult(error=str(e))
+		# 		if element_node:
+		# 			try:
+		# 				is_hidden = await element_node.is_hidden()
+		# 				if not is_hidden:
+		# 					await element_node.scroll_into_view_if_needed()
+		# 				await element_node.click(timeout=1500, force=True)
+		# 			except Exception:
+		# 				try:
+		# 					# Handle with js evaluate if fails to click using playwright
+		# 					await element_node.evaluate('el => el.click()')
+		# 				except Exception as e:
+		# 					logger.warning(f"Element not clickable with text '{params.text}' - {e}")
+		# 					return ActionResult(error=str(e))
+		# 			msg = f'🖱️  Clicked on element with text "{params.text}"'
+		# 			return ActionResult(extracted_content=msg, include_in_memory=True)
+		# 		else:
+		# 			return ActionResult(error=f"No element found for text '{params.text}'")
+		# 	except Exception as e:
+		# 		logger.warning(f"Element not clickable with text '{params.text}' - {e}")
+		# 		return ActionResult(error=str(e))
 
 		@self.registry.action(
 			'Input text into a input interactive element',
@@ -409,6 +409,20 @@ class Controller(Generic[Context]):
 				extracted_content=msg,
 				include_in_memory=True,
 			)
+
+		@self.registry.action(
+			'sub agent call',
+			param_model=LLMCallAction,
+		)
+		async def sub_agent_call(params: LLMCallAction, page_extraction_llm: BaseChatModel, browser: BrowserContext):
+			from browser_use.agent.service import Agent
+
+			agent = Agent(llm=page_extraction_llm, task=params.task, browser_context=browser)
+			history = await agent.run(max_steps=params.max_steps)
+			final_result = history.final_result()
+
+			msg = f'Called sub agent with task: {params.task} and got result: {final_result}'
+			return ActionResult(extracted_content=msg, include_in_memory=True)
 
 		# send keys
 		@self.registry.action(

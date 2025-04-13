@@ -57,6 +57,7 @@ from browser_use.telemetry.views import (
 	AgentStepTelemetryEvent,
 )
 from browser_use.utils import check_env_variables, time_execution_async, time_execution_sync
+from browser_use.workflow.views import Workflow
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -90,8 +91,9 @@ class Agent(Generic[Context]):
 	@time_execution_sync('--init (agent)')
 	def __init__(
 		self,
-		task: str,
 		llm: BaseChatModel,
+		task: str | None = None,
+		workflow: Workflow | None = None,
 		# Optional parameters
 		browser: Browser | None = None,
 		browser_context: BrowserContext | None = None,
@@ -155,9 +157,13 @@ class Agent(Generic[Context]):
 		if page_extraction_llm is None:
 			page_extraction_llm = llm
 
+		if workflow is None and task is None:
+			raise ValueError('Either task or workflow must be provided')
+
 		# Core components
-		self.task = task
 		self.llm = llm
+		self.task = task
+		self.workflow = workflow
 		self.controller = controller
 		self.sensitive_data = sensitive_data
 
@@ -194,6 +200,10 @@ class Agent(Generic[Context]):
 		self._setup_action_models()
 		self._set_browser_use_version_and_source()
 		self.initial_actions = self._convert_initial_actions(initial_actions) if initial_actions else None
+		if self.workflow:
+			raw_cached_actions = self.workflow.get_raw_action_dict()
+			cached_actions = self._convert_initial_actions(raw_cached_actions)
+			self.workflow.actions = cached_actions
 
 		# Model setup
 		self._set_model_names()
@@ -447,7 +457,13 @@ class Agent(Generic[Context]):
 			tokens = self._message_manager.state.history.current_tokens
 
 			try:
-				model_output = await self.get_next_action(input_messages)
+				if self.workflow:
+					model_output = self.workflow.get_current_model_output()
+					if model_output is None:
+						raise ValueError('Workflow is done')
+
+				else:
+					model_output = await self.get_next_action(input_messages)
 
 				# Check again for paused/stopped state after getting model output
 				# This is needed in case Ctrl+C was pressed during the get_next_action call
@@ -491,6 +507,8 @@ class Agent(Generic[Context]):
 				logger.info(f'📄 Result: {result[-1].extracted_content}')
 
 			self.state.consecutive_failures = 0
+			if self.workflow:
+				self.workflow.next_action()
 
 		except InterruptedError:
 			# logger.debug('Agent paused')

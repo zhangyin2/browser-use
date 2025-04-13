@@ -53,6 +53,11 @@ class ActionModel(BaseModel):
 				return param['index']
 		return None
 
+	@property
+	def action_name(self) -> str:
+		"""Get the action name"""
+		return next(iter(self.model_dump(exclude_unset=True).keys()))
+
 	def set_index(self, index: int):
 		"""Overwrite the index of the action"""
 		# Get the action name and params
