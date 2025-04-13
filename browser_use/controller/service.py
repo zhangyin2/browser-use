@@ -19,7 +19,6 @@ from browser_use.controller.registry.service import Registry
 from browser_use.controller.views import (
 	ClickElementAction,
 	ClickElementBySelectorAction,
-	ClickElementByXpathAction,
 	CloseTabAction,
 	DoneAction,
 	DragDropAction,
@@ -193,28 +192,28 @@ class Controller(Generic[Context]):
 				logger.warning(f'Element not clickable with selector {params.css_selector} - most likely the page changed')
 				return ActionResult(error=str(e))
 
-		@self.registry.action('Click on element by xpath', param_model=ClickElementByXpathAction)
-		async def click_element_by_xpath(params: ClickElementByXpathAction, browser: BrowserContext):
-			try:
-				element_node = await browser.get_locate_element_by_xpath(params.xpath)
-				if element_node:
-					try:
-						is_hidden = await element_node.is_hidden()
-						if not is_hidden:
-							await element_node.scroll_into_view_if_needed()
-						await element_node.click(timeout=1500, force=True)
-					except Exception:
-						try:
-							# Handle with js evaluate if fails to click using playwright
-							await element_node.evaluate('el => el.click()')
-						except Exception as e:
-							logger.warning(f"Element not clickable with xpath '{params.xpath}' - {e}")
-							return ActionResult(error=str(e))
-					msg = f'🖱️  Clicked on element with text "{params.xpath}"'
-					return ActionResult(extracted_content=msg, include_in_memory=True)
-			except Exception as e:
-				logger.warning(f'Element not clickable with xpath {params.xpath} - most likely the page changed')
-				return ActionResult(error=str(e))
+		# @self.registry.action('Click on element by xpath', param_model=ClickElementByXpathAction)
+		# async def click_element_by_xpath(params: ClickElementByXpathAction, browser: BrowserContext):
+		# 	try:
+		# 		element_node = await browser.get_locate_element_by_xpath(params.xpath)
+		# 		if element_node:
+		# 			try:
+		# 				is_hidden = await element_node.is_hidden()
+		# 				if not is_hidden:
+		# 					await element_node.scroll_into_view_if_needed()
+		# 				await element_node.click(timeout=1500, force=True)
+		# 			except Exception:
+		# 				try:
+		# 					# Handle with js evaluate if fails to click using playwright
+		# 					await element_node.evaluate('el => el.click()')
+		# 				except Exception as e:
+		# 					logger.warning(f"Element not clickable with xpath '{params.xpath}' - {e}")
+		# 					return ActionResult(error=str(e))
+		# 			msg = f'🖱️  Clicked on element with text "{params.xpath}"'
+		# 			return ActionResult(extracted_content=msg, include_in_memory=True)
+		# 	except Exception as e:
+		# 		logger.warning(f'Element not clickable with xpath {params.xpath} - most likely the page changed')
+		# 		return ActionResult(error=str(e))
 
 		# @self.registry.action('Click element with text', param_model=ClickElementByTextAction)
 		# async def click_element_by_text(params: ClickElementByTextAction, browser: BrowserContext):
