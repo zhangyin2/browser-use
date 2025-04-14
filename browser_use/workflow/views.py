@@ -1,11 +1,12 @@
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import yaml
 from pydantic import BaseModel
 
 from browser_use.agent.views import AgentBrain, AgentOutput
 from browser_use.controller.registry.views import ActionModel
+from browser_use.dom.history_tree_processor.view import DOMHistoryElement
 
 
 class WorkflowAction(BaseModel):
@@ -13,6 +14,7 @@ class WorkflowAction(BaseModel):
 
 	action_name: str
 	parameters: Dict[str, Any]
+	interacted_element: Optional[DOMHistoryElement] = None
 
 
 class Workflow:
@@ -29,7 +31,7 @@ class Workflow:
 		"""Get the actions as a dictionary"""
 		return [{action.action_name: action.parameters} for action in self.raw_actions]
 
-	def get_current_action(self):
+	def get_current_action(self) -> None | ActionModel:
 		"""Get the next step in the workflow"""
 		if self.actions is None:
 			raise ValueError('Actions not yet converted to ActionModel')
@@ -39,11 +41,21 @@ class Workflow:
 		step = self.actions[self.step_index]
 		return step
 
-	def get_current_model_output(self) -> None | AgentOutput:
+	def get_current_interacted_element(self) -> None | DOMHistoryElement:
+		"""Get the interacted element for the current action"""
+		if self.actions is None:
+			raise ValueError('Actions not yet converted to ActionModel')
+
+		if self.step_index >= self.length():
+			return None
+
+		return self.raw_actions[self.step_index].interacted_element
+
+	def get_current_model_output(self) -> tuple[AgentOutput | None, DOMHistoryElement | None]:
 		"""Get the next step in the workflow"""
 		action = self.get_current_action()
 		if not action:
-			return None
+			return None, None
 
 		current_state = AgentBrain(
 			evaluation_previous_goal='',
@@ -55,7 +67,7 @@ class Workflow:
 			current_state=current_state,
 			action=[action],
 		)
-		return model_output
+		return model_output, self.get_current_interacted_element()
 
 	def next_action(self):
 		"""Move to the next step in the workflow"""
@@ -89,7 +101,12 @@ class Workflow:
 			# Each step should have exactly one key (action name) and its parameters
 			action_name = next(iter(step_data.keys()))
 			parameters = step_data[action_name]
-			action = WorkflowAction(action_name=action_name, parameters=parameters or {})
+			interacted_element = parameters.get('interacted_element', None)
+			action = WorkflowAction(
+				action_name=action_name,
+				parameters=parameters or {},
+				interacted_element=interacted_element,
+			)
 			raw_actions.append(action)
 
 		return raw_actions

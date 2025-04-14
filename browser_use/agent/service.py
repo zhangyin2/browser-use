@@ -461,9 +461,15 @@ class Agent(Generic[Context]):
 
 			try:
 				if self.workflow:
-					model_output = self.workflow.get_current_model_output()
-					if model_output is None:
+					model_output, interacted_element = self.workflow.get_current_model_output()
+					if model_output is None or len(model_output.action) == 0:
 						raise ValueError('Workflow is done')
+
+					if interacted_element:
+						# update index of action in current state based on past interacted element
+						new_action = await self._update_action_indices(interacted_element, model_output.action[0], state)
+						if new_action:
+							model_output.action[0] = new_action
 
 				else:
 					model_output = await self.get_next_action(input_messages)
@@ -1097,7 +1103,7 @@ class Agent(Generic[Context]):
 			return action
 
 		current_element = HistoryTreeProcessor.find_history_element_in_tree(
-			historical_element, current_state.element_tree, match_criteria=['attributes']
+			historical_element, current_state.element_tree, match_criteria=['css_selector']
 		)
 
 		if not current_element or current_element.highlight_index is None:

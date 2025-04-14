@@ -1,6 +1,7 @@
 import hashlib
 from typing import Optional
 
+from browser_use.browser.context import BrowserContext
 from browser_use.dom.history_tree_processor.view import DOMHistoryElement, HashedDomElement
 from browser_use.dom.views import DOMElementNode
 
@@ -35,7 +36,7 @@ class HistoryTreeProcessor:
 	def find_history_element_in_tree(
 		dom_history_element: DOMHistoryElement,
 		tree: DOMElementNode,
-		match_criteria: list[str] = ['branch_path', 'attributes', 'xpath'],
+		match_criteria: list[str] = ['branch_path', 'attributes', 'xpath', 'css_selector'],
 	) -> Optional[DOMElementNode]:
 		hashed_dom_history_element = HistoryTreeProcessor._hash_dom_history_element(dom_history_element)
 		if match_criteria == []:
@@ -56,6 +57,8 @@ class HistoryTreeProcessor:
 					matches.append(hashed_node.attributes_hash == hashed_dom_history_element.attributes_hash)
 				if 'xpath' in match_criteria:
 					matches.append(hashed_node.xpath_hash == hashed_dom_history_element.xpath_hash)
+				if 'css_selector' in match_criteria:
+					matches.append(hashed_node.css_selector == hashed_dom_history_element.css_selector)
 
 				if all(matches):
 					# return the first match
@@ -92,7 +95,7 @@ class HistoryTreeProcessor:
 		attributes_hash = HistoryTreeProcessor._attributes_hash(dom_history_element.attributes)
 		xpath_hash = HistoryTreeProcessor._xpath_hash(dom_history_element.xpath)
 
-		return HashedDomElement(branch_path_hash, attributes_hash, xpath_hash)
+		return HashedDomElement(branch_path_hash, attributes_hash, xpath_hash, dom_history_element.css_selector)
 
 	@staticmethod
 	def _hash_dom_element(dom_element: DOMElementNode) -> HashedDomElement:
@@ -100,9 +103,11 @@ class HistoryTreeProcessor:
 		branch_path_hash = HistoryTreeProcessor._parent_branch_path_hash(parent_branch_path)
 		attributes_hash = HistoryTreeProcessor._attributes_hash(dom_element.attributes)
 		xpath_hash = HistoryTreeProcessor._xpath_hash(dom_element.xpath)
+		css_selector = BrowserContext._enhanced_css_selector_for_element(dom_element)
+
 		# text_hash = DomTreeProcessor._text_hash(dom_element)
 
-		return HashedDomElement(branch_path_hash, attributes_hash, xpath_hash)
+		return HashedDomElement(branch_path_hash, attributes_hash, xpath_hash, css_selector)
 
 	@staticmethod
 	def _get_parent_branch_path(dom_element: DOMElementNode) -> list[str]:

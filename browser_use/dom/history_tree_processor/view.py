@@ -13,6 +13,7 @@ class HashedDomElement:
 	branch_path_hash: str
 	attributes_hash: str
 	xpath_hash: str
+	css_selector: str | None = None
 	# text_hash: str
 
 

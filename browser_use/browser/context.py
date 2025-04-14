@@ -1080,7 +1080,7 @@ class BrowserContext:
 
 	@classmethod
 	@time_execution_sync('--enhanced_css_selector_for_element')
-	def _enhanced_css_selector_for_element(cls, element: DOMElementNode, include_dynamic_attributes: bool = True) -> str:
+	def _enhanced_css_selector_for_element(cls, element: DOMElementNode, include_dynamic_attributes: bool = False) -> str:
 		"""
 		Creates a CSS selector for a DOM element, handling various edge cases and special characters.
 
