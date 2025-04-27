@@ -1,5 +1,6 @@
 {
   "python.analysis.typeCheckingMode": "basic",
+  "python.defaultInterpreterPath": "/opt/homebrew/Caskroom/miniconda/base/envs/browser/bin/python",
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff",
     "editor.formatOnSave": true,

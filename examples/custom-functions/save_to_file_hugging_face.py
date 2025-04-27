@@ -7,7 +7,7 @@ import asyncio
 from typing import List
 
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 from browser_use.agent.service import Agent
 from browser_use.controller.service import Controller
@@ -33,13 +33,20 @@ def save_models(params: Models):
 		for model in params.models:
 			f.write(f'{model.title} ({model.url}): {model.likes} likes, {model.license}\n')
 
-
+api_key_openrouter = os.getenv('OPENROUTER_API_KEY', '')
 # video: https://preview.screen.studio/share/EtOhIk0P
 async def main():
-	task = 'Look up models with a license of cc-by-sa-4.0 and sort by most likes on Hugging face, save top 5 to file.'
+	task = 'Look up models with a license of mit and sort by most likes on Hugging face, save top 5 to file.'
 
-	model = ChatOpenAI(model='gpt-4o')
-	agent = Agent(task=task, llm=model, controller=controller)
+	model = ChatOpenAI(
+        base_url='https://api.seeknow.org/openrouter/api/v1',
+        # model='openai/gpt-4.1',
+        # model="openai/gpt-4.1-mini",
+        model='openai/o4-mini',
+        api_key=SecretStr(api_key_openrouter),
+        temperature=0.1
+    )
+	agent = Agent(task=task, llm=model, controller=controller, enable_memory=False)
 
 	await agent.run()
 

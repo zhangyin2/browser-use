@@ -46,6 +46,14 @@ def get_llm(provider: str):
 			st.stop()
 
 		return ChatOpenAI(model='gpt-4o', temperature=0.0)
+	elif provider == 'openrouter':
+		from langchain_openai import ChatOpenAI
+
+		api_key = os.getenv('OPENROUTER_API_KEY')
+		if not api_key:
+			st.error('Error: OPENROUTER_API_KEY is not set. Please provide a valid API key.')
+			st.stop()
+		return ChatOpenAI(model='deepseek/deepseek-chat-v3-0324', base_url='https://openrouter.ai/api/v1', temperature=0.2)
 	else:
 		st.error(f'Unsupported provider: {provider}')
 		st.stop()
@@ -55,7 +63,11 @@ def get_llm(provider: str):
 def initialize_agent(query: str, provider: str):
 	llm = get_llm(provider)
 	controller = Controller()
-	browser = Browser(config=BrowserConfig())
+	browser = Browser(config=BrowserConfig(
+		browser_binary_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',  # macOS path
+		# For Windows, typically: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
+		# For Linux, typically: '/usr/bin/google-chrome'
+	))
 
 	return Agent(
 		task=query,

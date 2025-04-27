@@ -965,10 +965,10 @@ class Agent(Generic[Context]):
 			f'Validate if the output of last action is what the user wanted and if the task is completed. '
 			f'If the task is unclear defined, you can let it pass. But if something is missing or the image does not show what was requested dont let it pass. '
 			f'Try to understand the page and help the model with suggestions like scroll, do x, ... to get the solution right. '
-			f'Task to validate: {self.task}. Return a JSON object with 2 keys: is_valid and reason. '
+			f'Task to validate: {self.task}. Return a JSON object with 2 keys: analysis and is_valid. '
+			f'analysis is a string that explains why it is valid or not.'
 			f'is_valid is a boolean that indicates if the output is correct. '
-			f'reason is a string that explains why it is valid or not.'
-			f' example: {{"is_valid": false, "reason": "The user wanted to search for "cat photos", but the agent searched for "dog photos" instead."}}'
+			f' example: {{"analysis": "The user wanted to search for "cat photos", but the agent searched for "dog photos" instead.", "is_valid": false}}'
 		)
 
 		if self.browser_context.session:
@@ -988,19 +988,19 @@ class Agent(Generic[Context]):
 			Validation results.
 			"""
 
+			analysis: str
 			is_valid: bool
-			reason: str
 
 		validator = self.llm.with_structured_output(ValidationResult, include_raw=True)
 		response: dict[str, Any] = await validator.ainvoke(msg)  # type: ignore
 		parsed: ValidationResult = response['parsed']
 		is_valid = parsed.is_valid
 		if not is_valid:
-			logger.info(f'❌ Validator decision: {parsed.reason}')
-			msg = f'The output is not yet correct. {parsed.reason}.'
+			logger.info(f'❌ Validator decision: {parsed.analysis}')
+			msg = f'The output is not yet correct. {parsed.analysis}.'
 			self.state.last_result = [ActionResult(extracted_content=msg, include_in_memory=True)]
 		else:
-			logger.info(f'✅ Validator decision: {parsed.reason}')
+			logger.info(f'✅ Validator decision: {parsed.analysis}')
 		return is_valid
 
 	async def log_completion(self) -> None:
@@ -1304,10 +1304,10 @@ class Agent(Generic[Context]):
 		):
 			plan = self._remove_think_tags(plan)
 		try:
-			plan_json = json.loads(plan)
+			plan_json = extract_json_from_model_output(plan)
 			logger.info(f'Planning Analysis:\n{json.dumps(plan_json, indent=4)}')
 		except json.JSONDecodeError:
-			logger.info(f'Planning Analysis:\n{plan}')
+			logger.info(f'Planning Analysis decode error:\n{plan}')
 		except Exception as e:
 			logger.debug(f'Error parsing planning analysis: {e}')
 			logger.info(f'Plan: {plan}')

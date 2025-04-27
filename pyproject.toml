@@ -100,4 +100,5 @@ dev-dependencies = [
     "ipdb>=0.13.13",
     "pre-commit>=4.2.0",
     "codespell>=2.4.1",
+    "gradio (>=5.25.2,<6.0.0)"
 ]

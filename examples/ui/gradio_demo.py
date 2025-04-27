@@ -7,12 +7,13 @@ from typing import List, Optional
 import gradio as gr
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
 # Local module imports
-from browser_use import Agent
+from browser_use import Agent, Browser, BrowserConfig
 
 load_dotenv()
 
@@ -52,22 +53,29 @@ def parse_agent_history(history_str: str) -> None:
 
 async def run_browser_task(
 	task: str,
-	api_key: str,
 	model: str = 'gpt-4o',
+	temperature: float = 0.2,
 	headless: bool = True,
+	use_vision: bool = True,
 ) -> str:
-	if not api_key.strip():
-		return 'Please provide an API key'
-
-	os.environ['OPENAI_API_KEY'] = api_key
+    
+	api_key = os.getenv('OPENROUTER_API_KEY', "")
 
 	try:
 		agent = Agent(
 			task=task,
-			llm=ChatOpenAI(model='gpt-4o'),
+			llm=ChatOpenAI(model=model, 
+                  	base_url='https://openrouter.ai/api/v1', 
+                  	temperature=temperature,
+                  	api_key=SecretStr(api_key) if api_key else None),
+			browser=Browser(config=BrowserConfig(browser_binary_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')),
+			use_vision=use_vision,
 		)
 		result = await agent.run()
-		#  TODO: The result cloud be parsed better
+		# 将 AgentHistoryList 转换为字符串
+		if isinstance(result, AgentHistoryList):
+			parse_agent_history(str(result))
+			return str(result)
 		return result
 	except Exception as e:
 		return f'Error: {str(e)}'
@@ -79,14 +87,16 @@ def create_ui():
 
 		with gr.Row():
 			with gr.Column():
-				api_key = gr.Textbox(label='OpenAI API Key', placeholder='sk-...', type='password')
+       
 				task = gr.Textbox(
 					label='Task Description',
 					placeholder='E.g., Find flights from New York to London for next week',
 					lines=3,
 				)
-				model = gr.Dropdown(choices=['gpt-4', 'gpt-3.5-turbo'], label='Model', value='gpt-4')
+				model = gr.Dropdown(choices=['deepseek/deepseek-chat-v3-0324','openai/gpt-4.1', 'openai/o4-mini-high'], label='Model', value='openai/gpt-4.1')
+				temperature = gr.Slider(minimum=0, maximum=1, step=0.1, value=0.5, label='Temperature')
 				headless = gr.Checkbox(label='Run Headless', value=True)
+				use_vision = gr.Checkbox(label='Use Vision', value=True)
 				submit_btn = gr.Button('Run Task')
 
 			with gr.Column():
@@ -94,7 +104,7 @@ def create_ui():
 
 		submit_btn.click(
 			fn=lambda *args: asyncio.run(run_browser_task(*args)),
-			inputs=[task, api_key, model, headless],
+			inputs=[task, model, temperature, headless, use_vision],
 			outputs=output,
 		)
 
