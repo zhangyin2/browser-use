@@ -237,5 +237,8 @@ Special emphasis:In some cases, the website may require private information or n
 """
 # In the end, output the main workflows based on the pageflow. Workflow is the main function of the website, which is the path that users use the main function of the website.
     
-            asyncio.run(run_agent(task, context=context, max_steps=400, initial_actions=initial_actions))
+            await run_agent(task, context=context, max_steps=400, initial_actions=initial_actions)
             finish_task(file_path, item["name"])
+
+if __name__ == "__main__":
+    asyncio.run(main())
