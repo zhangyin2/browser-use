@@ -124,7 +124,7 @@ def read_url_items_from_csv(path: str) -> List[dict] | None:
 def finish_task(file_path: str, name: str):
     df = pd.read_csv(file_path, header=None, usecols=[0, 1, 2, 3])
     df.loc[df[1] == name, 3] = 1
-    df.to_csv(file_path, index=False)
+    df.to_csv(file_path, index=False, header=False)
 
 
 if __name__ == "__main__":
@@ -155,7 +155,7 @@ if __name__ == "__main__":
         if item["has_done"] == 1:
             print(f"pass {item['name']}")
             continue
-        print(f"start {item['name']}")
+        print(f"start {item['url']}")
         initial_actions = [
             {'go_to_url': {'url': item["url"]}}
         ]
