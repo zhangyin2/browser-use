@@ -19,17 +19,14 @@ api_key_openrouter = os.getenv('OPENROUTER_API_KEY', '')
 if not api_key_openrouter:
     raise ValueError('OPENROUTER_API_KEY is not set')
 
-browser_context = None
-async def init_browser_context():
-    global browser_context
-    if browser_context is None:
-        browser = Browser(
+
+def init_browser():
+    browser = Browser(
             config=BrowserConfig(
                 browser_binary_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',  # macOS path
             )
         )
-        browser_context = await browser.new_context()
-    return browser_context
+    return browser
 
 def init_llm() -> Tuple[ChatOpenAI, ChatOpenAI, ChatOpenAI]:
     plan_llm = ChatOpenAI(
@@ -58,6 +55,7 @@ def init_llm() -> Tuple[ChatOpenAI, ChatOpenAI, ChatOpenAI]:
     return plan_llm, llm, extractor_llm
 
 controller = Controller()
+browser = init_browser()
 
 class Transition(BaseModel):
     to_page: str = Field(description="To page id")
@@ -85,9 +83,8 @@ def save_pageflow_to_file(params: Pageflow):
             f.write(json.dumps(page.model_dump(), ensure_ascii=False) + '\n')
 
 
-async def run_agent(task: str, max_steps: int = 38, initial_actions: List[dict] = []):
+async def run_agent(task: str, context, max_steps: int = 38, initial_actions: List[dict] = []):
     plan_llm, llm, extractor_llm = init_llm()
-    context = await init_browser_context()
     agent = Agent(task=task, initial_actions=initial_actions, planner_llm=plan_llm, llm=llm, 
                 page_extraction_llm=extractor_llm, is_planner_reasoning=True, 
                 enable_memory=False, use_vision=False, browser_context=context, controller=controller)
@@ -122,12 +119,12 @@ def read_url_items_from_csv(path: str) -> List[dict] | None:
         return None
     
 def finish_task(file_path: str, name: str):
-    df = pd.read_csv(file_path, header=None, usecols=[0, 1, 2, 3])
+    df = pd.read_csv(file_path, header=None)
     df.loc[df[1] == name, 3] = 1
     df.to_csv(file_path, index=False, header=False)
 
 
-if __name__ == "__main__":
+async def main():
     # urls = [
     #     {
     #         "url":"https://www.tailopez.com/",
@@ -150,16 +147,17 @@ if __name__ == "__main__":
     url_items_from_file = read_url_items_from_csv(file_path)
     if url_items_from_file:
         urls = url_items_from_file
-
-    for item in urls:
-        if item["has_done"] == 1:
-            print(f"pass {item['name']}")
-            continue
-        print(f"start {item['url']}")
-        initial_actions = [
-            {'go_to_url': {'url': item["url"]}}
-        ]
-        task = f"""
+        
+    async with await browser.new_context() as context:
+        for item in urls:
+            if item["has_done"] == 1:
+                print(f"pass {item['name']}")
+                continue
+            print(f"start {item['url']}")
+            initial_actions = [
+                {'go_to_url': {'url': item["url"]}}
+            ]
+            task = f"""
 Explore a website's pageflow, and save the pageflow to the file.
 1. Open website {item["name"]}: `{item["url"]}`, this website is a {item["type"]},
 2. You should analyze the homepage to identify all possible transitions. Simulate user interactions to explore and document each page of the website, recording the following details for each transition:
@@ -239,5 +237,5 @@ Special emphasis:In some cases, the website may require private information or n
 """
 # In the end, output the main workflows based on the pageflow. Workflow is the main function of the website, which is the path that users use the main function of the website.
     
-        asyncio.run(run_agent(task, max_steps=400, initial_actions=initial_actions))
-        finish_task(file_path, item["name"])
+            asyncio.run(run_agent(task, context=context, max_steps=400, initial_actions=initial_actions))
+            finish_task(file_path, item["name"])
