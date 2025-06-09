@@ -16,14 +16,17 @@ from browser_use.controller.service import Controller
 load_dotenv()
 
 api_key_openrouter = os.getenv('OPENROUTER_API_KEY', '')
+openai_api_key = os.getenv('OPENAI_API_KEY', '')
 if not api_key_openrouter:
     raise ValueError('OPENROUTER_API_KEY is not set')
+if not openai_api_key:
+    raise ValueError('OPENAI_API_KEY is not set')
 
 
 def init_browser():
     browser = Browser(
             config=BrowserConfig(
-                browser_binary_path='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',  # macOS path
+                browser_binary_path='C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
             )
         )
     return browser
@@ -39,17 +42,17 @@ def init_llm() -> Tuple[ChatOpenAI, ChatOpenAI, ChatOpenAI]:
         temperature=0.1
     )
     llm = ChatOpenAI(
-        base_url='https://api.seeknow.org/openrouter/api/v1',
+        # base_url='https://api.seeknow.org/openai/api/v1',
         # model='openai/gpt-4.1',
         # model="openai/gpt-4.1-mini",
-        model='openai/o4-mini',
-        api_key=SecretStr(api_key_openrouter),
-        temperature=0.1
+        model='o4-mini',
+        api_key=SecretStr(openai_api_key),
+        disabled_params={"parallel_tool_calls": None}
     )
     extractor_llm = ChatOpenAI(
-        base_url='https://api.seeknow.org/openrouter/api/v1',
-        model='openai/gpt-4.1-mini',
-        api_key=SecretStr(api_key_openrouter),
+        # base_url='https://api.seeknow.org/openai/api/v1',
+        model='gpt-4.1-mini',
+        api_key=SecretStr(openai_api_key),
         temperature=0.1
     )
     return plan_llm, llm, extractor_llm
@@ -87,7 +90,7 @@ async def run_agent(task: str, context, max_steps: int = 38, initial_actions: Li
     plan_llm, llm, extractor_llm = init_llm()
     agent = Agent(task=task, initial_actions=initial_actions, planner_llm=plan_llm, llm=llm, 
                 page_extraction_llm=extractor_llm, is_planner_reasoning=True, 
-                enable_memory=False, use_vision=False, browser_context=context, controller=controller)
+                enable_memory=False, use_vision=True, browser_context=context, controller=controller)
     result = await agent.run(max_steps=max_steps)
     return result 
 
@@ -125,25 +128,7 @@ def finish_task(file_path: str, name: str):
 
 
 async def main():
-    # urls = [
-    #     {
-    #         "url":"https://www.tailopez.com/",
-    #         "type":"Branding Or Biography Website",
-    #         "name":"tailopez"
-    #     },
-    #     {
-    #         "url":"https://www.mayaangelou.com/",
-    #         "type":"Branding Or Biography Website",
-    #         "name":"mayaangelou"
-    #     },
-    #     {
-    #         "url":"https://simonsinek.com/",
-    #         "type":"Branding Or Biography Website",
-    #         "name":"simonsinek"
-    #     },
-    # ]
-    # 示例：从文件读取（如果需要）
-    file_path = '/Users/zhangyin/Downloads/webs.csv'
+    file_path = 'D:\\github\\browser-use\\webs2.csv'
     url_items_from_file = read_url_items_from_csv(file_path)
     if url_items_from_file:
         urls = url_items_from_file
@@ -167,7 +152,7 @@ Explore a website's pageflow, and save the pageflow to the file.
 - possible branch paths or options
 3. if the page has repeated elements(like pagination, list, etc.), you just explore the first one.
 4. Organize all pages into a pageflow structure.
-5. save the pageflow to the file.
+5. In the end, save the pageflow to the file.
 
 pageflow, is the path that users use the main function of the website, including the page jump relationship and the function process in the page.
 a website may have many pages, each page has a page_id, and a description of the page, and the transitions to other pages.
@@ -239,6 +224,7 @@ Special emphasis:In some cases, the website may require private information or n
     
             await run_agent(task, context=context, max_steps=400, initial_actions=initial_actions)
             finish_task(file_path, item["name"])
+            print(f"finish {item['name']}")
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     asyncio.run(main())

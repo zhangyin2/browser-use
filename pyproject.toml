@@ -77,6 +77,11 @@ docstring-code-format = true
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[[tool.poetry.source]]
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+priority = "primary"
+
 [tool.hatch.build]
 include = [
     "browser_use/**/*.py",
